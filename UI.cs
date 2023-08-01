@@ -36,7 +36,7 @@ public class UI : IDisposable
         closeThread.Start();
 
         var isSending = false;
-        
+
         Robot!.Line.Subscribe(async line =>
         {
             if (isSending)
