@@ -1,82 +1,127 @@
-using System.Text;
 using System.Text.Json;
-using System.Net.WebSockets;
+using WebSocketSharp;
+using WebSocketSharp.Server;
 using RoboMaster;
 
 public class UI : IDisposable
 {
     public event Action? OnClose;
 
-    public RoboMasterClient? Robot { get; set; }
-    public Follower? Follower { get; set; }
+    public Feed<float> BaseSpeed => server.BaseSpeed;
+    public Feed<float> TargetX => server.TargetX;
+    public Feed<float> PSensitivity => server.PSensitivity;
+    public Feed<float> ISensitivity => server.ISensitivity;
+    public Feed<float> DSensitivity => server.DSensitivity;
+    public Feed<float> LookAheadSensitivityDropoff => server.LookAheadSensitivityDropoff;
 
-    private SocketsHttpHandler? handler;
-    private ClientWebSocket? socket;
+    public RoboMasterClient Robot { get; }
+    public Follower Follower { get; }
 
-    public async Task Run()
+    private WebSocketServer? webSocketServer;
+    private UIServer server = new();
+
+    public UI(RoboMasterClient robot, Follower follower)
     {
-        handler = new SocketsHttpHandler();
-        socket = new ClientWebSocket();
+        Robot = robot;
+        Follower = follower;
+    }
 
-        await socket.ConnectAsync(new Uri("ws://localhost:8080"), new HttpMessageInvoker(handler), CancellationToken.None);
+    public void Start()
+    {
+        webSocketServer = new WebSocketServer("ws://localhost:8080");
+        webSocketServer.AddWebSocketService<UIServer>("/", () => server);
+        webSocketServer.Start();
 
-        var closeThread = new Thread(() =>
+        server.Closed += e => OnClose?.Invoke();
+
+        Robot.Line.Subscribe(line =>
         {
-            while (true)
+            var json = JsonSerializer.Serialize(new
             {
-                if (socket.CloseStatus.HasValue)
+                type = "location",
+                value = line.Points[0].X,
+                time = DateTime.Now
+            });
+
+            server.BroadcastMessage(json);
+        });
+
+        Follower.WheelSpeed.Subscribe(speed =>
+        {
+            var json = JsonSerializer.Serialize(new
+            {
+                type = "speed",
+                value = new
                 {
-                    OnClose?.Invoke();
-                    break;
-                }
-            }
-        });
+                    right = speed.Item1,
+                    left = speed.Item2
+                },
+                time = DateTime.Now
+            });
 
-        closeThread.IsBackground = true;
-        closeThread.Start();
-
-        var isSending = false;
-
-        Robot!.Line.Subscribe(async line =>
-        {
-            if (isSending)
-            {
-                return;
-            }
-
-            isSending = true;
-
-            var json = JsonSerializer.Serialize(line);
-            var bytes = Encoding.UTF8.GetBytes(json);
-            var buffer = new ArraySegment<byte>(bytes);
-
-            await socket.SendAsync(buffer, WebSocketMessageType.Text, true, CancellationToken.None);
-
-            isSending = false;
-        });
-
-        Follower!.WheelSpeed.Subscribe(async speed =>
-        {
-            if (isSending)
-            {
-                return;
-            }
-
-            isSending = true;
-
-            var json = JsonSerializer.Serialize(speed);
-            var bytes = Encoding.UTF8.GetBytes(json);
-            var buffer = new ArraySegment<byte>(bytes);
-
-            await socket.SendAsync(buffer, WebSocketMessageType.Text, true, CancellationToken.None);
-
-            isSending = false;
+            server.BroadcastMessage(json);
         });
     }
 
     public void Dispose()
     {
-        socket?.Dispose();
-        handler?.Dispose();
+        webSocketServer?.Stop();
+    }
+
+    private class UIServer : WebSocketBehavior
+    {
+        public event Action<CloseEventArgs>? Closed;
+
+        public Feed<float> BaseSpeed { get; } = new();
+        public Feed<float> TargetX { get; } = new();
+        public Feed<float> PSensitivity { get; } = new();
+        public Feed<float> ISensitivity { get; } = new();
+        public Feed<float> DSensitivity { get; } = new();
+        public Feed<float> LookAheadSensitivityDropoff { get; } = new();
+
+        protected override void OnMessage(MessageEventArgs e)
+        {
+            if (e.IsText)
+            {
+                var data = JsonDocument.Parse(e.Data).RootElement;
+
+                var type = data.GetProperty("type").GetString();
+
+                if (type == "baseSpeed")
+                {
+                    BaseSpeed.Notify(data.GetProperty("value").GetSingle());
+                }
+                else if (type == "targetX")
+                {
+                    TargetX.Notify(data.GetProperty("value").GetSingle());
+                }
+                else if (type == "pSensitivity")
+                {
+                    PSensitivity.Notify(data.GetProperty("value").GetSingle());
+                }
+                else if (type == "iSensitivity")
+                {
+                    ISensitivity.Notify(data.GetProperty("value").GetSingle());
+                }
+                else if (type == "dSensitivity")
+                {
+                    DSensitivity.Notify(data.GetProperty("value").GetSingle());
+                }
+                else if (type == "lookAheadSensitivityDropoff")
+                {
+                    LookAheadSensitivityDropoff.Notify(data.GetProperty("value").GetSingle());
+                }
+            }
+        }
+
+        protected override void OnClose(CloseEventArgs e)
+        {
+            if (Sessions.Count == 0) Closed?.Invoke(e);
+        }
+
+        public void BroadcastMessage(string msg)
+        {
+            Send(msg);
+        }
     }
 }

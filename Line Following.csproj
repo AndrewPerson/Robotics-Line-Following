@@ -3,6 +3,7 @@
   <ItemGroup>
     <PackageReference Include="RoboMaster.NET" Version="1.0.0" />
     <PackageReference Include="System.Reactive" Version="6.0.0" />
+    <PackageReference Include="WebSocketSharp" Version="1.0.3-rc11" />
   </ItemGroup>
 
   <PropertyGroup>

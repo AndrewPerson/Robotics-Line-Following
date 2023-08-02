@@ -2,15 +2,15 @@ using RoboMaster;
 
 public class Follower : IObserver<FollowerData>
 {
-    public const float BaseWheelSpeed = 50;
+    public float BaseWheelSpeed { get; set; } = 50;
 
-    public const float TargetX = 0.35f;
+    public float TargetX { get; set; } = 0.35f;
 
-    public const float PSensitivity = 500;
-    public const float DSensitivity = 250;
-    public const float ISensitivity = 0.01f;
+    public float PSensitivity { get; set; } = 500;
+    public float DSensitivity { get; set; } = 250;
+    public float ISensitivity { get; set; } = 0.01f;
 
-    public const float LookAheadSensitivityDropoff = 0.5f;
+    public float LookAheadSensitivityDropoff { get; set; } = 0.5f;
 
     public RoboMasterClient Robot { get; }
     public Feed<(float, float)> WheelSpeed { get; } = new();

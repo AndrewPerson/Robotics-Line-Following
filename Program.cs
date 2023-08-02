@@ -3,25 +3,23 @@ using System.Reactive.Linq;
 using RoboMaster;
 using OpenCvSharp;
 
-var ui = new UI();
-
-var uiCompletion = new TaskCompletionSource();
-ui.OnClose += () => uiCompletion.SetResult();
-
-var uiThread = new Thread(() =>
-{
-    ui.Run();
-});
-
-uiThread.IsBackground = true;
-uiThread.Start();
-
 var robot = await RoboMasterClient.Connect(RoboMasterClient.DIRECT_CONNECT_IP);
 
 var follower = new Follower(robot);
 
-ui.Robot = robot;
-ui.Follower = follower;
+var ui = new UI(robot, follower);
+
+var uiCompletion = new TaskCompletionSource();
+ui.OnClose += () => uiCompletion.SetResult();
+
+ui.BaseSpeed.Subscribe(speed => follower.BaseWheelSpeed = speed);
+ui.TargetX.Subscribe(targetX => follower.TargetX = targetX);
+ui.PSensitivity.Subscribe(sensitivity => follower.PSensitivity = sensitivity);
+ui.ISensitivity.Subscribe(sensitivity => follower.ISensitivity = sensitivity);
+ui.DSensitivity.Subscribe(sensitivity => follower.DSensitivity = sensitivity);
+ui.LookAheadSensitivityDropoff.Subscribe(sensitivity => follower.LookAheadSensitivityDropoff = sensitivity);
+
+ui.Start();
 
 CancellationTokenSource? previousWheelSpeedCanceller = null;
 
