@@ -1,23 +1,37 @@
-const locationChart = new Chart(document.getElementById("location-chart"), {
-    type: 'line',
+const errorChart = new Chart(document.getElementById("error-chart"), {
+    type: "line",
     options: {
-        responsive: true,
+        responsive: true
     },
     data: {
         labels: [],
-        datasets: [{
-            label: "Line X",
-            data: [],
-            fill: false,
-            borderColor: 'rgb(75, 192, 192)'
-        }]
+        datasets: [
+            {
+                label: "P Error",
+                data: [],
+                fill: false,
+                borderColor: 'rgb(75, 192, 192)'
+            },
+            {
+                label: "I Error",
+                data: [],
+                fill: false,
+                borderColor: 'rgb(192, 75, 75)'
+            },
+            {
+                label: "D Error",
+                data: [],
+                fill: false,
+                borderColor: 'rgb(75, 75, 192)'
+            }
+        ]
     }
 });
 
 const speedChart = new Chart(document.getElementById("speed-chart"), {
-    type: 'line',
+    type: "line",
     options: {
-        responsive: true,
+        responsive: true
     },
     data: {
         labels: [],
@@ -35,6 +49,22 @@ const speedChart = new Chart(document.getElementById("speed-chart"), {
                 borderColor: 'rgb(192, 75, 75)'
             }
         ]
+    }
+});
+
+const locationChart = new Chart(document.getElementById("location-chart"), {
+    type: "line",
+    options: {
+        responsive: true
+    },
+    data: {
+        labels: [],
+        datasets: [{
+            label: "Line X",
+            data: [],
+            fill: false,
+            borderColor: 'rgb(75, 192, 192)'
+        }]
     }
 });
 
@@ -62,6 +92,13 @@ websocket.addEventListener("message", e => {
         speedChart.data.datasets[0].data.push(data.value.right);
         speedChart.data.datasets[1].data.push(data.value.left);
         speedChart.update();
+    }
+    else if (data.type == "error") {
+        errorChart.data.labels.push(data.time);
+        errorChart.data.datasets[0].data.push(data.value.p);
+        errorChart.data.datasets[1].data.push(data.value.i);
+        errorChart.data.datasets[2].data.push(data.value.d);
+        errorChart.update();
     }
     else
     {

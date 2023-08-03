@@ -13,6 +13,10 @@ public class Follower : IObserver<FollowerData>
     public RoboMasterClient Robot { get; }
     public Feed<(float, float)> WheelSpeed { get; } = new();
 
+    public Feed<float> PError { get; } = new();
+    public Feed<float> DError { get; } = new();
+    public Feed<float> IError { get; } = new();
+
     private float previousError = 0;
     private float cumulativeError = 0;
 
@@ -62,15 +66,19 @@ public class Follower : IObserver<FollowerData>
         {
             var actual = line.Points[2].X;
 
-            var pError = TargetX - actual;
-            var dError = pError - previousError;
-            var iError = cumulativeError += pError;
-
-            var scaledError = pError * PSensitivity + dError * DSensitivity + iError * ISensitivity;
+            var pError = (TargetX - actual) * PSensitivity;
+            var dError = (pError - previousError) * DSensitivity;
+            var iError = (cumulativeError += pError) * ISensitivity;
 
             previousError = pError;
 
-            return (BaseWheelSpeed + scaledError, BaseWheelSpeed - scaledError);
+            PError.Notify(pError);
+            DError.Notify(dError);
+            IError.Notify(iError);
+
+            var totalError = pError + dError + iError;
+
+            return (BaseWheelSpeed + totalError, BaseWheelSpeed - totalError);
         }
     }
 }

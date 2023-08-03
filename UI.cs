@@ -118,6 +118,23 @@ public class UI : IDisposable
 
             server.BroadcastMessage(json);
         });
+
+        Follower.PError.Zip(Follower.IError, Follower.DError).SkipWhile(_ => paused).Sample(new TimeSpan(0, 0, 0, 0, 100)).Subscribe(error =>
+        {
+            var json = JsonSerializer.Serialize(new
+            {
+                type = "error",
+                value = new
+                {
+                    p = error.First,
+                    i = error.Second,
+                    d = error.Third
+                },
+                time = DateTime.Now
+            });
+
+            server.BroadcastMessage(json);
+        });
     }
 
     public void Dispose()
