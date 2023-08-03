@@ -86,6 +86,8 @@ robot.Video.Subscribe(frame =>
 });
 #endregion
 
+isPaused.Notify(true);
+
 await robot.SetLineRecognitionColour(LineColour.Red);
 await robot.SetLineRecognitionEnabled();
 
