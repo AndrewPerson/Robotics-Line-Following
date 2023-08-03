@@ -4,9 +4,11 @@ using RoboMaster;
 using OpenCvSharp;
 
 var robot = await RoboMasterClient.Connect(RoboMasterClient.DIRECT_CONNECT_IP);
-
 var follower = new Follower(robot);
 
+var isPaused = new Feed<bool>();
+
+#region UI
 var ui = new UI(robot, follower);
 
 var uiCompletion = new TaskCompletionSource();
@@ -17,10 +19,16 @@ ui.TargetX.Subscribe(targetX => follower.TargetX = targetX);
 ui.PSensitivity.Subscribe(sensitivity => follower.PSensitivity = sensitivity);
 ui.ISensitivity.Subscribe(sensitivity => follower.ISensitivity = sensitivity);
 ui.DSensitivity.Subscribe(sensitivity => follower.DSensitivity = sensitivity);
-ui.LookAheadSensitivityDropoff.Subscribe(sensitivity => follower.LookAheadSensitivityDropoff = sensitivity);
+
+ui.Pause += () => isPaused.Notify(true);
+ui.Resume += () => isPaused.Notify(false);
 
 ui.Start();
 
+System.Diagnostics.Process.Start("http://localhost:5500");
+#endregion
+
+#region Wheel Speeds
 CancellationTokenSource? previousWheelSpeedCanceller = null;
 
 follower.WheelSpeed.Subscribe(speed =>
@@ -32,7 +40,9 @@ follower.WheelSpeed.Subscribe(speed =>
 
     previousWheelSpeedCanceller = wheelSpeedCanceller;
 });
+#endregion
 
+#region IR Distance
 var irFeed = new Feed<float>();
 
 var irThread = new Thread(async () =>
@@ -46,11 +56,15 @@ var irThread = new Thread(async () =>
 
 irThread.IsBackground = true;
 irThread.Start();
+#endregion
 
-robot.Line.CombineLatest(irFeed)
-            .Select(data => new FollowerData(data.First, data.Second))
+#region Line Following
+robot.Line.CombineLatest(irFeed, isPaused)
+            .Select(data => new FollowerData(data.First, data.Second, data.Third))
             .Subscribe(follower);
+#endregion
 
+#region Line Saving
 var lineFile = File.Open("line.csv", FileMode.OpenOrCreate);
 robot.Line.Subscribe(line =>
 {
@@ -63,11 +77,14 @@ robot.Line.Subscribe(line =>
         lineFile.WriteAsync(Encoding.Default.GetBytes($"{line.Points[0].X.ToString()}\n"));
     }
 });
+#endregion
 
+#region Video
 robot.Video.Subscribe(frame =>
 {
     Cv2.ImShow("Robot Camera", frame);
 });
+#endregion
 
 await robot.SetLineRecognitionColour(LineColour.Red);
 await robot.SetLineRecognitionEnabled();

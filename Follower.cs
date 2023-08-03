@@ -8,9 +8,7 @@ public class Follower : IObserver<FollowerData>
 
     public float PSensitivity { get; set; } = 500;
     public float DSensitivity { get; set; } = 250;
-    public float ISensitivity { get; set; } = 0.01f;
-
-    public float LookAheadSensitivityDropoff { get; set; } = 0.5f;
+    public float ISensitivity { get; set; } = 0f;
 
     public RoboMasterClient Robot { get; }
     public Feed<(float, float)> WheelSpeed { get; } = new();
@@ -35,35 +33,34 @@ public class Follower : IObserver<FollowerData>
 
     public void OnNext(FollowerData value)
     {
-        var (line, distance) = value;
+        var (line, distance, isPaused) = value;
 
-        WheelSpeed.Notify(GetWheelSpeed(line, distance));   
+        WheelSpeed.Notify(GetWheelSpeed(line, distance, isPaused));   
     }
 
-    private (float, float) GetWheelSpeed(Line line, float distance)
+    private (float, float) GetWheelSpeed(Line line, float distance, bool isPaused)
     {
+        if (isPaused)
+        {
+            return (0, 0);
+        }
+
         if (distance < 30)
         {
             return (0, 0);
         }
 
-        if (line.Points.Length == 0)
+        if (line.Points.Length < 3)
         {
             return (0, 0);
         }
         else if (line.Type == LineType.Intersection)
         {
-            return (0, 0);
+            return (BaseWheelSpeed / 2, BaseWheelSpeed / -2);
         }
         else
         {
-            var weights = line.Points.Select((_, i) => 1 - Math.Pow(LookAheadSensitivityDropoff, i));
-            var weightSum = weights.Sum();
-            var normalisedWeights = weights.Select(w => w / weightSum);
-
-            var weightedXs = line.Points.Select((p, i) => p.X * normalisedWeights.ElementAt(i));
-
-            var actual = (float)weightedXs.Sum();
+            var actual = line.Points[2].X;
 
             var pError = TargetX - actual;
             var dError = pError - previousError;
@@ -81,5 +78,6 @@ public class Follower : IObserver<FollowerData>
 public record struct FollowerData
 (
     Line Line,
-    float Distance
+    float Distance,
+    bool IsPaused
 );

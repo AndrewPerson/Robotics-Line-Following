@@ -6,7 +6,7 @@ const locationChart = new Chart(document.getElementById("location-chart"), {
     data: {
         labels: [],
         datasets: [{
-            label: "Error",
+            label: "Line X",
             data: [],
             fill: false,
             borderColor: 'rgb(75, 192, 192)'
@@ -40,9 +40,14 @@ const speedChart = new Chart(document.getElementById("speed-chart"), {
 
 const websocket = new WebSocket("ws://localhost:8080");
 
-websocket.addEventListener("close", _ => {
-    window.close();
-});
+const inputNames = [
+    ["base-speed", "baseSpeed"],
+    ["target-x", "targetX"],
+    ["p-sensitivity", "pSensitivity"],
+    ["i-sensitivity", "iSensitivity"],
+    ["d-sensitivity", "dSensitivity"],
+    ["look-ahead-sensitivity-dropoff", "lookAheadSensitivityDropoff"]
+];
 
 websocket.addEventListener("message", e => {
     const data = JSON.parse(e.data);
@@ -58,16 +63,15 @@ websocket.addEventListener("message", e => {
         speedChart.data.datasets[1].data.push(data.value.left);
         speedChart.update();
     }
+    else
+    {
+        for (const [name, key] in object) {
+            if (data.type == key) {
+                document.getElementById(name).value = data.value.toString();
+            }
+        }
+    }
 });
-
-const inputNames = [
-    ["base-speed", "baseSpeed"],
-    ["target-x", "targetX"],
-    ["p-sensitivity", "pSensitivity"],
-    ["i-sensitivity", "iSensitivity"],
-    ["d-sensitivity", "dSensitivity"],
-    ["look-ahead-sensitivity-dropoff", "lookAheadSensitivityDropoff"]
-];
 
 inputNames.forEach(([name, key]) => {
     const input = document.getElementById(name);
@@ -78,4 +82,16 @@ inputNames.forEach(([name, key]) => {
             value: parseFloat(e.target.value)
         }));
     });
+});
+
+document.getElementById("pause").addEventListener("click", _ => {
+    websocket.send(JSON.stringify({
+        type: "pause"
+    }));
+});
+
+document.getElementById("resume").addEventListener("click", _ => {
+    websocket.send(JSON.stringify({
+        type: "resume"
+    }));
 });

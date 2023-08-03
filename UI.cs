@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Reactive.Linq;
 using WebSocketSharp;
 using WebSocketSharp.Server;
 using RoboMaster;
@@ -6,19 +7,22 @@ using RoboMaster;
 public class UI : IDisposable
 {
     public event Action? OnClose;
+    public event Action? Pause;
+    public event Action? Resume;
 
     public Feed<float> BaseSpeed => server.BaseSpeed;
     public Feed<float> TargetX => server.TargetX;
     public Feed<float> PSensitivity => server.PSensitivity;
     public Feed<float> ISensitivity => server.ISensitivity;
     public Feed<float> DSensitivity => server.DSensitivity;
-    public Feed<float> LookAheadSensitivityDropoff => server.LookAheadSensitivityDropoff;
 
     public RoboMasterClient Robot { get; }
     public Follower Follower { get; }
 
     private WebSocketServer? webSocketServer;
     private UIServer server = new();
+
+    private bool paused = false;
 
     public UI(RoboMasterClient robot, Follower follower)
     {
@@ -28,25 +32,78 @@ public class UI : IDisposable
 
     public void Start()
     {
+        server.Init += () =>
+        {
+            server.BroadcastMessage(JsonSerializer.Serialize(new
+            {
+                type = "baseSpeed",
+                value = Follower.BaseWheelSpeed
+            }));
+
+            server.BroadcastMessage(JsonSerializer.Serialize(new
+            {
+                type = "targetX",
+                value = Follower.TargetX
+            }));
+
+            server.BroadcastMessage(JsonSerializer.Serialize(new
+            {
+                type = "pSensitivity",
+                value = Follower.PSensitivity
+            }));
+
+            server.BroadcastMessage(JsonSerializer.Serialize(new
+            {
+                type = "iSensitivity",
+                value = Follower.ISensitivity
+            }));
+
+            server.BroadcastMessage(JsonSerializer.Serialize(new
+            {
+                type = "dSensitivity",
+                value = Follower.DSensitivity
+            }));
+        };
+
+        server.Closed += _ => OnClose?.Invoke();
+
+        server.Pause += () => Pause?.Invoke();
+        server.Pause += () => paused = true;
+
+        server.Resume += () => Resume?.Invoke();
+        server.Resume += () => paused = false;
+
         webSocketServer = new WebSocketServer("ws://localhost:8080");
-        webSocketServer.AddWebSocketService<UIServer>("/", () => server);
+        webSocketServer.AddWebSocketService("/", () => server);
         webSocketServer.Start();
 
-        server.Closed += e => OnClose?.Invoke();
-
-        Robot.Line.Subscribe(line =>
+        Robot.Line.SkipWhile((_, _) => paused).Sample(new TimeSpan(0, 0, 0, 0, 100)).Subscribe(line =>
         {
-            var json = JsonSerializer.Serialize(new
+            if (line.Points.Length > 0)
             {
-                type = "location",
-                value = line.Points[0].X,
-                time = DateTime.Now
-            });
+                var json = JsonSerializer.Serialize(new
+                {
+                    type = "location",
+                    value = line.Points[0].X,
+                    time = DateTime.Now
+                });
 
-            server.BroadcastMessage(json);
+                server.BroadcastMessage(json);
+            }
+            else
+            {
+                var json = JsonSerializer.Serialize(new
+                {
+                    type = "location",
+                    value = 0,
+                    time = DateTime.Now
+                });
+
+                server.BroadcastMessage(json);
+            }
         });
 
-        Follower.WheelSpeed.Subscribe(speed =>
+        Follower.WheelSpeed.SkipWhile((_, _) => paused).Sample(new TimeSpan(0, 0, 0, 0, 100)).Subscribe(speed =>
         {
             var json = JsonSerializer.Serialize(new
             {
@@ -70,7 +127,10 @@ public class UI : IDisposable
 
     private class UIServer : WebSocketBehavior
     {
+        public event Action? Init;
         public event Action<CloseEventArgs>? Closed;
+        public event Action? Pause;
+        public event Action? Resume;
 
         public Feed<float> BaseSpeed { get; } = new();
         public Feed<float> TargetX { get; } = new();
@@ -78,6 +138,11 @@ public class UI : IDisposable
         public Feed<float> ISensitivity { get; } = new();
         public Feed<float> DSensitivity { get; } = new();
         public Feed<float> LookAheadSensitivityDropoff { get; } = new();
+
+        protected override void OnOpen()
+        {
+            Init?.Invoke();
+        }
 
         protected override void OnMessage(MessageEventArgs e)
         {
@@ -110,6 +175,14 @@ public class UI : IDisposable
                 else if (type == "lookAheadSensitivityDropoff")
                 {
                     LookAheadSensitivityDropoff.Notify(data.GetProperty("value").GetSingle());
+                }
+                else if (type == "pause")
+                {
+                    Pause?.Invoke();
+                }
+                else if (type == "resume")
+                {
+                    Resume?.Invoke();
                 }
             }
         }

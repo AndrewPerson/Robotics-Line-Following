@@ -1,9 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="RoboMaster.NET" Version="1.0.0" />
+    <!-- <PackageReference Include="RoboMaster.NET" Version="1.0.0" /> -->
     <PackageReference Include="System.Reactive" Version="6.0.0" />
     <PackageReference Include="WebSocketSharp" Version="1.0.3-rc11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RoboMasterNet\RoboMasterNet.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

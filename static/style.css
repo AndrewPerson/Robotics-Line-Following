@@ -18,7 +18,7 @@ body {
 
 .charts {
     display: flex;
-    flex-direction: row;
+    flex-direction: column;
     height: 100%;
     flex: 1;
 }
