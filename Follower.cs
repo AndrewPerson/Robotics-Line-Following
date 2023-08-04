@@ -7,7 +7,7 @@ public class Follower : IObserver<FollowerData>
     public float TargetX { get; set; } = 0.35f;
 
     public float PSensitivity { get; set; } = 500;
-    public float DSensitivity { get; set; } = 250;
+    public float DSensitivity { get; set; } = 0;
     public float ISensitivity { get; set; } = 0f;
 
     public RoboMasterClient Robot { get; }
@@ -46,25 +46,37 @@ public class Follower : IObserver<FollowerData>
     {
         if (isPaused)
         {
+            PError.Notify(0);
+            DError.Notify(0);
+            IError.Notify(0);
             return (0, 0);
         }
 
         if (distance < 30)
         {
+            PError.Notify(0);
+            DError.Notify(0);
+            IError.Notify(0);
             return (0, 0);
         }
 
-        if (line.Points.Length < 3)
+        if (line.Points.Length < 1)
         {
+            PError.Notify(0);
+            DError.Notify(0);
+            IError.Notify(0);
             return (0, 0);
         }
         else if (line.Type == LineType.Intersection)
         {
+            PError.Notify(0);
+            DError.Notify(0);
+            IError.Notify(0);
             return (BaseWheelSpeed / 2, BaseWheelSpeed / -2);
         }
         else
         {
-            var actual = line.Points[2].X;
+            var actual = line.Points[0].X;
 
             var pError = (TargetX - actual) * PSensitivity;
             var dError = (pError - previousError) * DSensitivity;

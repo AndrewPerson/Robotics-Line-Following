@@ -24,8 +24,6 @@ ui.Pause += () => isPaused.Notify(true);
 ui.Resume += () => isPaused.Notify(false);
 
 ui.Start();
-
-System.Diagnostics.Process.Start("http://localhost:5500");
 #endregion
 
 #region Wheel Speeds

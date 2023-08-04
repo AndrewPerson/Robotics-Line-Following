@@ -1,7 +1,10 @@
 const errorChart = new Chart(document.getElementById("error-chart"), {
     type: "line",
     options: {
-        responsive: true
+        responsive: true,
+        animation: {
+            duration: 0
+        }
     },
     data: {
         labels: [],
@@ -31,7 +34,10 @@ const errorChart = new Chart(document.getElementById("error-chart"), {
 const speedChart = new Chart(document.getElementById("speed-chart"), {
     type: "line",
     options: {
-        responsive: true
+        responsive: true,
+        animation: {
+            duration: 0
+        }
     },
     data: {
         labels: [],
@@ -55,7 +61,10 @@ const speedChart = new Chart(document.getElementById("speed-chart"), {
 const locationChart = new Chart(document.getElementById("location-chart"), {
     type: "line",
     options: {
-        responsive: true
+        responsive: true,
+        animation: {
+            duration: 0
+        }
     },
     data: {
         labels: [],
