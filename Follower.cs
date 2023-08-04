@@ -7,7 +7,7 @@ public class Follower : IObserver<FollowerData>
     public float TargetX { get; set; } = 0.35f;
 
     public float PSensitivity { get; set; } = 500;
-    public float DSensitivity { get; set; } = 0;
+    public float DSensitivity { get; set; } = 250;
     public float ISensitivity { get; set; } = 0f;
 
     public RoboMasterClient Robot { get; }
@@ -79,7 +79,7 @@ public class Follower : IObserver<FollowerData>
             var actual = line.Points[0].X;
 
             var pError = (TargetX - actual) * PSensitivity;
-            var dError = (pError - previousError) * DSensitivity;
+            var dError = (pError - previousError) / PSensitivity * DSensitivity;
             var iError = (cumulativeError += pError) * ISensitivity;
 
             previousError = pError;
