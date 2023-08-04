@@ -27,16 +27,15 @@ ui.Start();
 #endregion
 
 #region Wheel Speeds
-CancellationTokenSource? previousWheelSpeedCanceller = null;
+var sendingWheelSpeed = false;
 
-follower.WheelSpeed.Subscribe(speed =>
+follower.WheelSpeed.Subscribe(async speed =>
 {
-    var wheelSpeedCanceller = new CancellationTokenSource();
-    Task.Run(() => robot.SetWheelSpeed(speed.Item1, speed.Item2, wheelSpeedCanceller.Token));
+    if (sendingWheelSpeed) return;
 
-    previousWheelSpeedCanceller?.Cancel();
-
-    previousWheelSpeedCanceller = wheelSpeedCanceller;
+    sendingWheelSpeed = true;
+    await robot.SetWheelSpeed(speed.Item1, speed.Item2);
+    sendingWheelSpeed = false;
 });
 #endregion
 
@@ -57,7 +56,7 @@ irThread.Start();
 #endregion
 
 #region Line Following
-robot.Line.CombineLatest(irFeed, isPaused)
+robot.Line.CombineLatest(irFeed, isPaused).SkipWhile(_ => sendingWheelSpeed)
             .Select(data => new FollowerData(data.First, data.Second, data.Third))
             .Subscribe(follower);
 #endregion
@@ -78,14 +77,15 @@ robot.Line.Subscribe(line =>
 #endregion
 
 #region Video
-robot.Video.Subscribe(frame =>
-{
-    Cv2.ImShow("Robot Camera", frame);
-});
+// robot.Video.Subscribe(frame =>
+// {
+//     Cv2.ImShow("Robot Camera", frame);
+// });
 #endregion
 
 isPaused.Notify(true);
 
+// await robot.SetVideoPushEnabled(true);
 await robot.SetLineRecognitionColour(LineColour.Red);
 await robot.SetLineRecognitionEnabled();
 

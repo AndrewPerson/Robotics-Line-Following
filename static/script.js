@@ -77,6 +77,12 @@ const locationChart = new Chart(document.getElementById("location-chart"), {
     }
 });
 
+setInterval(() => {
+    errorChart.update();
+    locationChart.update();
+    speedChart.update();
+}, 1000);
+
 const websocket = new WebSocket("ws://localhost:8080");
 
 const inputNames = [
@@ -94,20 +100,17 @@ websocket.addEventListener("message", e => {
     if (data.type == "location") {
         locationChart.data.labels.push(data.time);
         locationChart.data.datasets[0].data.push(data.value);
-        locationChart.update();
     }
     else if (data.type == "speed") {
         speedChart.data.labels.push(data.time);
         speedChart.data.datasets[0].data.push(data.value.right);
         speedChart.data.datasets[1].data.push(data.value.left);
-        speedChart.update();
     }
     else if (data.type == "error") {
         errorChart.data.labels.push(data.time);
         errorChart.data.datasets[0].data.push(data.value.p);
         errorChart.data.datasets[1].data.push(data.value.i);
         errorChart.data.datasets[2].data.push(data.value.d);
-        errorChart.update();
     }
     else
     {

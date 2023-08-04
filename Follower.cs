@@ -79,7 +79,7 @@ public class Follower : IObserver<FollowerData>
             var actual = line.Points[0].X;
 
             var pError = (TargetX - actual) * PSensitivity;
-            var dError = (pError - previousError) / PSensitivity * DSensitivity;
+            var dError = (pError - previousError) * DSensitivity / PSensitivity;
             var iError = (cumulativeError += pError) * ISensitivity;
 
             previousError = pError;
