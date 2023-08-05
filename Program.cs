@@ -1,97 +1,67 @@
-﻿using System.Text;
 using System.Reactive.Linq;
 using RoboMaster;
-using OpenCvSharp;
+using Stateless;
 
 var robot = await RoboMasterClient.Connect(RoboMasterClient.DIRECT_CONNECT_IP);
-var follower = new Follower(robot);
 
-var isPaused = new Feed<bool>();
+#region State Machine
+var robotState = new StateMachine<RobotState, RobotTrigger>(RobotState.RedStopped);
 
-#region UI
-var ui = new UI(robot, follower);
+robotState.Configure(RobotState.FollowingLine)
+    .Ignore(RobotTrigger.LineDetected)
+    .Ignore(RobotTrigger.NoObstacle)
+    .Ignore(RobotTrigger.Resume);
 
-var uiCompletion = new TaskCompletionSource();
-ui.OnClose += () => uiCompletion.SetResult();
+robotState.Configure(RobotState.FollowingRedLine)
+    .SubstateOf(RobotState.FollowingLine)
 
-ui.BaseSpeed.Subscribe(speed => follower.BaseWheelSpeed = speed);
-ui.TargetX.Subscribe(targetX => follower.TargetX = targetX);
-ui.PSensitivity.Subscribe(sensitivity => follower.PSensitivity = sensitivity);
-ui.ISensitivity.Subscribe(sensitivity => follower.ISensitivity = sensitivity);
-ui.DSensitivity.Subscribe(sensitivity => follower.DSensitivity = sensitivity);
+    .OnEntryAsync(async () => await robot.SetLineRecognitionColour(LineColour.Red))
+    .OnEntry(() => Actions.FollowLine(robot, robotState))
 
-ui.Pause += () => isPaused.Notify(true);
-ui.Resume += () => isPaused.Notify(false);
+    .Permit(RobotTrigger.TooCloseToObstacle, RobotState.RedStopped)
+    .Permit(RobotTrigger.NoLineDetected, RobotState.RedStopped)
+    .Permit(RobotTrigger.Pause, RobotState.RedStopped)
+    .Permit(RobotTrigger.IntersectionDetected, RobotState.FollowingBlueLine);
 
-ui.Start();
+robotState.Configure(RobotState.FollowingBlueLine)
+    .SubstateOf(RobotState.FollowingLine)
+
+    .OnEntryAsync(async () => await robot.SetLineRecognitionColour(LineColour.Blue))
+    .OnEntry(() => Actions.FollowLine(robot, robotState))
+
+    .Permit(RobotTrigger.IntersectionDetected, RobotState.BlueStopped)
+    .Permit(RobotTrigger.TooCloseToObstacle, RobotState.BlueStopped)
+    .Permit(RobotTrigger.Pause, RobotState.BlueStopped)
+    .Permit(RobotTrigger.NoLineDetected, RobotState.FollowingRedLine);
+
+robotState.Configure(RobotState.Stopped)
+    .OnEntryAsync(async () => await Actions.Stop(robot))
+    .OnEntry(() => Actions.LookForLine(robot, robotState))
+
+    .Ignore(RobotTrigger.NoLineDetected)
+    .Ignore(RobotTrigger.IntersectionDetected)
+    .Ignore(RobotTrigger.TooCloseToObstacle)
+    .Ignore(RobotTrigger.Pause);
+
+robotState.Configure(RobotState.RedStopped)
+    .SubstateOf(RobotState.Stopped)
+
+    .Permit(RobotTrigger.LineDetected, RobotState.FollowingRedLine)
+    .Permit(RobotTrigger.NoObstacle, RobotState.FollowingRedLine)
+    .Permit(RobotTrigger.Resume, RobotState.FollowingRedLine);
+
+robotState.Configure(RobotState.BlueStopped)
+    .SubstateOf(RobotState.Stopped)
+
+    .Permit(RobotTrigger.LineDetected, RobotState.FollowingBlueLine)
+    .Permit(RobotTrigger.NoObstacle, RobotState.FollowingBlueLine)
+    .Permit(RobotTrigger.Resume, RobotState.FollowingBlueLine);
 #endregion
 
-#region Wheel Speeds
-var sendingWheelSpeed = false;
+Actions.LookForObstacles(robot, robotState);
 
-follower.WheelSpeed.Subscribe(async speed =>
-{
-    if (sendingWheelSpeed) return;
+await Task.WhenAny(Task.Run(Console.ReadKey));
 
-    sendingWheelSpeed = true;
-    await robot.SetWheelSpeed(speed.Item1, speed.Item2);
-    sendingWheelSpeed = false;
-});
-#endregion
+await robotState.FireAsync(RobotTrigger.Pause);
 
-#region IR Distance
-var irFeed = new Feed<float>();
-
-var irThread = new Thread(async () =>
-{
-    await robot.SetIrEnabled();
-    while (true)
-    {
-        irFeed.Notify(await robot.GetIRDistance(1));
-    }
-});
-
-irThread.IsBackground = true;
-irThread.Start();
-#endregion
-
-#region Line Following
-robot.Line.CombineLatest(irFeed, isPaused).SkipWhile(_ => sendingWheelSpeed)
-            .Select(data => new FollowerData(data.First, data.Second, data.Third))
-            .Subscribe(follower);
-#endregion
-
-#region Line Saving
-var lineFile = File.Open("line.csv", FileMode.OpenOrCreate);
-robot.Line.Subscribe(line =>
-{
-    if (line.Points.Length == 0)
-    {
-        lineFile.WriteAsync(Encoding.Default.GetBytes("-1\n"));
-    }
-    else
-    {
-        lineFile.WriteAsync(Encoding.Default.GetBytes($"{line.Points[0].X.ToString()}\n"));
-    }
-});
-#endregion
-
-#region Video
-// robot.Video.Subscribe(frame =>
-// {
-//     Cv2.ImShow("Robot Camera", frame);
-// });
-#endregion
-
-isPaused.Notify(true);
-
-// await robot.SetVideoPushEnabled(true);
-await robot.SetLineRecognitionColour(LineColour.Red);
-await robot.SetLineRecognitionEnabled();
-
-Console.WriteLine("Press any key to stop...");
-
-await Task.WhenAny(Task.Run(Console.ReadKey), uiCompletion.Task);
-
-ui.Dispose();
 robot.Dispose();
