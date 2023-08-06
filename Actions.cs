@@ -76,7 +76,7 @@ public static class Actions
             {
                 if (line.Points.Length == 10 && line.Type == LineType.Straight)
                 {
-                    await robotState.SafeFireAsync(RobotTrigger.StraightLineDetected);
+                    await robotState.SafeFireAsync(RobotTrigger.LineDetected);
                     break;
                 }
             }

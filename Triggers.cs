@@ -1,6 +1,6 @@
 public enum RobotTrigger
 {
-    StraightLineDetected,
+    LineDetected,
     IntersectionDetected,
     NoLineDetected,
     ObstacleTooClose,
