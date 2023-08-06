@@ -15,12 +15,12 @@ public static class Actions
 
                 if (distance < 30)
                 {
-                    if (!wasTooClose) await robotState.FireAsync(RobotTrigger.TooCloseToObstacle);
+                    if (!wasTooClose) await robotState.SafeFireAsync(RobotTrigger.ObstacleTooClose);
                     wasTooClose = true;
                 }
                 else
                 {
-                    if (wasTooClose) await robotState.FireAsync(RobotTrigger.NoObstacle);
+                    if (wasTooClose) await robotState.SafeFireAsync(RobotTrigger.NoObstacles);
                     wasTooClose = false;
                 }
 
@@ -42,13 +42,13 @@ public static class Actions
             {
                 if (line.Points.Length != 10)
                 {
-                    await robotState.FireAsync(RobotTrigger.NoLineDetected);
+                    await robotState.SafeFireAsync(RobotTrigger.NoLineDetected);
                     break;
                 }
 
                 if (line.Type != LineType.Straight)
                 {
-                    await robotState.FireAsync(RobotTrigger.IntersectionDetected);
+                    await robotState.SafeFireAsync(RobotTrigger.IntersectionDetected);
                     break;
                 }
 
@@ -72,11 +72,11 @@ public static class Actions
     {
         new Thread(async () =>
         {
-            await foreach (var line in robot!.Line.ToAsyncEnumerable())
+            await foreach (var line in robot.Line.ToAsyncEnumerable())
             {
                 if (line.Points.Length == 10 && line.Type == LineType.Straight)
                 {
-                    await robotState!.FireAsync(RobotTrigger.LineDetected);
+                    await robotState.SafeFireAsync(RobotTrigger.StraightLineDetected);
                     break;
                 }
             }

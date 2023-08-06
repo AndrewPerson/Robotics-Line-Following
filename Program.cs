@@ -7,61 +7,65 @@ var robot = await RoboMasterClient.Connect(RoboMasterClient.DIRECT_CONNECT_IP);
 #region State Machine
 var robotState = new StateMachine<RobotState, RobotTrigger>(RobotState.RedStopped);
 
-robotState.Configure(RobotState.FollowingLine)
-    .Ignore(RobotTrigger.LineDetected)
-    .Ignore(RobotTrigger.NoObstacle)
-    .Ignore(RobotTrigger.Resume);
-
 robotState.Configure(RobotState.FollowingRedLine)
-    .SubstateOf(RobotState.FollowingLine)
-
     .OnEntryAsync(async () => await robot.SetLineRecognitionColour(LineColour.Red))
     .OnEntry(() => Actions.FollowLine(robot, robotState))
 
-    .Permit(RobotTrigger.TooCloseToObstacle, RobotState.RedStopped)
     .Permit(RobotTrigger.NoLineDetected, RobotState.RedStopped)
+    .Permit(RobotTrigger.ObstacleTooClose, RobotState.RedStopped)
     .Permit(RobotTrigger.Pause, RobotState.RedStopped)
     .Permit(RobotTrigger.IntersectionDetected, RobotState.FollowingBlueLine);
 
 robotState.Configure(RobotState.FollowingBlueLine)
-    .SubstateOf(RobotState.FollowingLine)
-
     .OnEntryAsync(async () => await robot.SetLineRecognitionColour(LineColour.Blue))
     .OnEntry(() => Actions.FollowLine(robot, robotState))
 
     .Permit(RobotTrigger.IntersectionDetected, RobotState.BlueStopped)
-    .Permit(RobotTrigger.TooCloseToObstacle, RobotState.BlueStopped)
+    .Permit(RobotTrigger.ObstacleTooClose, RobotState.BlueStopped)
     .Permit(RobotTrigger.Pause, RobotState.BlueStopped)
     .Permit(RobotTrigger.NoLineDetected, RobotState.FollowingRedLine);
 
+var stoppedReasons = new HashSet<RobotTrigger>() { RobotTrigger.Pause };
 robotState.Configure(RobotState.Stopped)
     .OnEntryAsync(async () => await Actions.Stop(robot))
     .OnEntry(() => Actions.LookForLine(robot, robotState))
+    
+    .OnEntryFrom(RobotTrigger.NoLineDetected, () => stoppedReasons.Add(RobotTrigger.NoLineDetected))
+    .OnEntryFrom(RobotTrigger.IntersectionDetected, () => stoppedReasons.Add(RobotTrigger.IntersectionDetected))
+    .OnEntryFrom(RobotTrigger.ObstacleTooClose, () => stoppedReasons.Add(RobotTrigger.ObstacleTooClose))
+    .OnEntryFrom(RobotTrigger.Pause, () => stoppedReasons.Add(RobotTrigger.Pause))
+    
+    .OnExit(stoppedReasons.Clear)
 
-    .Ignore(RobotTrigger.NoLineDetected)
-    .Ignore(RobotTrigger.IntersectionDetected)
-    .Ignore(RobotTrigger.TooCloseToObstacle)
-    .Ignore(RobotTrigger.Pause);
+    .InternalTransition(RobotTrigger.NoLineDetected, () => stoppedReasons.Add(RobotTrigger.NoLineDetected))
+    .InternalTransition(RobotTrigger.IntersectionDetected, () => stoppedReasons.Add(RobotTrigger.IntersectionDetected))
+    .InternalTransition(RobotTrigger.ObstacleTooClose, () => stoppedReasons.Add(RobotTrigger.ObstacleTooClose))
+    .InternalTransition(RobotTrigger.Pause, () => stoppedReasons.Add(RobotTrigger.Pause))
+
+    .InternalTransitionIf(RobotTrigger.StraightLineDetected, _ => stoppedReasons.Count >= 2, () => stoppedReasons.Remove(RobotTrigger.NoLineDetected))
+    .InternalTransitionIf(RobotTrigger.StraightLineDetected, _ => stoppedReasons.Count >= 2, () => stoppedReasons.Remove(RobotTrigger.IntersectionDetected))
+    .InternalTransitionIf(RobotTrigger.NoObstacles, _ => stoppedReasons.Count >= 2, () => stoppedReasons.Remove(RobotTrigger.ObstacleTooClose))
+    .InternalTransitionIf(RobotTrigger.Resume, _ => stoppedReasons.Count >= 2, () => stoppedReasons.Remove(RobotTrigger.Pause));
 
 robotState.Configure(RobotState.RedStopped)
     .SubstateOf(RobotState.Stopped)
 
-    .Permit(RobotTrigger.LineDetected, RobotState.FollowingRedLine)
-    .Permit(RobotTrigger.NoObstacle, RobotState.FollowingRedLine)
-    .Permit(RobotTrigger.Resume, RobotState.FollowingRedLine);
+    .PermitIf(RobotTrigger.StraightLineDetected, RobotState.FollowingRedLine, () => stoppedReasons.Count == 1 && stoppedReasons.Contains(RobotTrigger.NoLineDetected))
+    .PermitIf(RobotTrigger.NoObstacles, RobotState.FollowingRedLine, () => stoppedReasons.Count == 1 && stoppedReasons.Contains(RobotTrigger.ObstacleTooClose))
+    .PermitIf(RobotTrigger.Resume, RobotState.FollowingRedLine, () => stoppedReasons.Count == 1 && stoppedReasons.Contains(RobotTrigger.Pause));
 
 robotState.Configure(RobotState.BlueStopped)
     .SubstateOf(RobotState.Stopped)
 
-    .Permit(RobotTrigger.LineDetected, RobotState.FollowingBlueLine)
-    .Permit(RobotTrigger.NoObstacle, RobotState.FollowingBlueLine)
-    .Permit(RobotTrigger.Resume, RobotState.FollowingBlueLine);
+    .PermitIf(RobotTrigger.StraightLineDetected, RobotState.FollowingBlueLine, () => stoppedReasons.Count == 1 && stoppedReasons.Contains(RobotTrigger.IntersectionDetected))
+    .PermitIf(RobotTrigger.NoObstacles, RobotState.FollowingBlueLine, () => stoppedReasons.Count == 1 && stoppedReasons.Contains(RobotTrigger.ObstacleTooClose))
+    .PermitIf(RobotTrigger.Resume, RobotState.FollowingBlueLine, () => stoppedReasons.Count == 1 && stoppedReasons.Contains(RobotTrigger.Pause));
 #endregion
 
 Actions.LookForObstacles(robot, robotState);
 
 await Task.WhenAny(Task.Run(Console.ReadKey));
 
-await robotState.FireAsync(RobotTrigger.Pause);
+await robotState.SafeFireAsync(RobotTrigger.Pause);
 
 robot.Dispose();

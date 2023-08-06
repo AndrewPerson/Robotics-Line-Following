@@ -1,8 +1,7 @@
 public enum RobotState
 {
-    FollowingLine,
-        FollowingRedLine,
-        FollowingBlueLine,
+    FollowingRedLine,
+    FollowingBlueLine,
     Stopped,
         RedStopped,
         BlueStopped
