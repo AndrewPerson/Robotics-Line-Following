@@ -27,17 +27,14 @@ robotState.Configure(RobotState.FollowingBlueLine)
 var stoppedReasons = new HashSet<RobotTrigger>() { RobotTrigger.Pause };
 robotState.Configure(RobotState.Stopped)
     .OnEntryAsync(async () => await Actions.Stop(robot))
-    .OnEntry(() => Actions.LookForLine(robot, robotState))
-    
-    .OnEntryFrom(RobotTrigger.NoLineDetected, () => stoppedReasons.Add(RobotTrigger.NoLineDetected))
-    .OnEntryFrom(RobotTrigger.ObstacleTooClose, () => stoppedReasons.Add(RobotTrigger.ObstacleTooClose))
-    .OnEntryFrom(RobotTrigger.Pause, () => stoppedReasons.Add(RobotTrigger.Pause))
-    
-    .OnExit(stoppedReasons.Clear)
 
-    .InternalTransition(RobotTrigger.NoLineDetected, () => stoppedReasons.Add(RobotTrigger.NoLineDetected))
-    .InternalTransition(RobotTrigger.ObstacleTooClose, () => stoppedReasons.Add(RobotTrigger.ObstacleTooClose))
-    .InternalTransition(RobotTrigger.Pause, () => stoppedReasons.Add(RobotTrigger.Pause))
+    .OnExit(stoppedReasons.Clear)
+    
+    .OnEntryFrom(RobotTrigger.NoLineDetected, () => Actions.LookForLine(robot, robotState))
+
+    .OnEntryFromAndInternal(RobotTrigger.NoLineDetected, () => stoppedReasons.Add(RobotTrigger.NoLineDetected))
+    .OnEntryFromAndInternal(RobotTrigger.ObstacleTooClose, () => stoppedReasons.Add(RobotTrigger.ObstacleTooClose))
+    .OnEntryFromAndInternal(RobotTrigger.Pause, () => stoppedReasons.Add(RobotTrigger.Pause))
 
     .InternalTransitionIf(RobotTrigger.LineDetected, _ => stoppedReasons.Count >= 2, () => stoppedReasons.Remove(RobotTrigger.NoLineDetected))
     .InternalTransitionIf(RobotTrigger.NoObstacles, _ => stoppedReasons.Count >= 2, () => stoppedReasons.Remove(RobotTrigger.ObstacleTooClose))
