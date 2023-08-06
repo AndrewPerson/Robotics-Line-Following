@@ -10,7 +10,7 @@ public class Follower
     public float DSensitivity { get; set; } = 250;
     public float ISensitivity { get; set; } = 0;
 
-    public NormalDistribution PointWeights = new(2, 0.5);
+    public ICurve PointWeights = new NormalDistribution(2, 0.5);
 
     private double previousError = 0;
     private double cumulativeError = 0;

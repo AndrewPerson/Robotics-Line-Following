@@ -1,4 +1,4 @@
-public struct NormalDistribution
+public struct NormalDistribution : ICurve
 {
     public double Mean { get; set; } = 0;
     public double StandardDeviation { get; set; } = 1;
