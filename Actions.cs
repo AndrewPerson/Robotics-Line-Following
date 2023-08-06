@@ -52,7 +52,7 @@ public static class Actions
                     break;
                 }
 
-                var (rightSpeed, leftSpeed) = follower.GetWheelSpeed(line);
+                var (leftSpeed, rightSpeed) = follower.GetWheelSpeed(line);
 
                 await robot.SetWheelSpeed(rightSpeed, leftSpeed);
             }

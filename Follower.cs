@@ -57,6 +57,6 @@ public class Follower
         var normalisedLeftWeight = leftWeight / totalWeight;
         var normalisedRightWeight = rightWeight / totalWeight;
 
-        return (normalisedRightWeight * BaseWheelSpeed, normalisedLeftWeight * BaseWheelSpeed);
+        return (normalisedLeftWeight * BaseWheelSpeed, normalisedRightWeight * BaseWheelSpeed);
     }
 }
