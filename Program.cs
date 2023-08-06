@@ -54,8 +54,13 @@ robotState.Configure(RobotState.BlueStopped)
     .PermitIf(RobotTrigger.Resume, RobotState.FollowingBlueLine, () => stoppedReasons.Count == 1 && stoppedReasons.Contains(RobotTrigger.Pause));
 #endregion
 
-Actions.LookForObstacles(robot, robotState);
+Console.WriteLine("Paused. Press any key to start...");
+await Task.WhenAny(Task.Run(Console.ReadKey));
 
+Actions.LookForObstacles(robot, robotState);
+await robotState.FireAsync(RobotTrigger.Resume);
+
+Console.WriteLine("Press any key to stop...");
 await Task.WhenAny(Task.Run(Console.ReadKey));
 
 await robotState.SafeFireAsync(RobotTrigger.Pause);
