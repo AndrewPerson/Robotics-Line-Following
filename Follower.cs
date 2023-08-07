@@ -19,7 +19,10 @@ public class Follower
 
     public (float, float) GetWheelSpeed(Line line)
     {
-        var actual = line.Points.Select((point, index) => point.X * PointWeights.Sample(index)).Sum();
+        var weights = line.Points.Select((_, index) => PointWeights.Sample(index));
+        var weightsSum = weights.Sum();
+
+        var actual = line.Points.Zip(weights).Select((tuple, index) => tuple.Item1.X * (tuple.Item2 / weightsSum)).Sum();
 
         var pError = TargetX - actual;
         var dError = pError - previousError;
