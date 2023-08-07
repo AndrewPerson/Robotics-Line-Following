@@ -2,7 +2,7 @@ using RoboMaster;
 
 public class Follower
 {
-    public float BaseWheelSpeed { get; set; } = 75;
+    public float BaseWheelSpeed { get; set; } = 150;
 
     public float TargetX { get; set; } = 0.35f;
 
