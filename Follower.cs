@@ -24,15 +24,15 @@ public class Follower
 
         var normalisedWeights = weights.Select(weight => weight / weightsSum); // Sums to one
 
-        var actual = line.Points.Zip(normalisedWeights).Select(tuple => tuple.Item1.X * tuple.Item2).Sum();
+        double actual = line.Points.Zip(normalisedWeights).Select(tuple => tuple.Item1.X * tuple.Item2).Sum();
 
-        var pError = TargetX - actual;
-        var dError = pError - previousError;
-        var iError = cumulativeError += pError;
+        double pError = TargetX - actual;
+        double dError = pError - previousError;
+        double iError = cumulativeError += pError;
 
         previousError = pError;
 
-        var totalError = Math.Clamp(pError * PSensitivity + dError * DSensitivity + iError * ISensitivity, -1, 1);
+        double totalError = Math.Clamp(pError * PSensitivity + dError * DSensitivity + iError * ISensitivity, -1, 1);
 
         float leftWeight;
         float rightWeight;
