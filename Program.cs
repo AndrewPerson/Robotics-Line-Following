@@ -22,7 +22,8 @@ robotState.Configure(RobotState.FollowingBlueLine)
 
     .Permit(RobotTrigger.ObstacleTooClose, RobotState.BlueStopped)
     .Permit(RobotTrigger.Pause, RobotState.BlueStopped)
-    .Permit(RobotTrigger.NoLineDetected, RobotState.FollowingRedLine);
+    .Permit(RobotTrigger.NoLineDetected, RobotState.FollowingRedLine)
+    .Permit(RobotTrigger.IntersectionDetected, RobotState.FollowingRedLine);
 
 var stoppedReasons = new HashSet<RobotTrigger>() { RobotTrigger.Pause };
 robotState.Configure(RobotState.Stopped)
