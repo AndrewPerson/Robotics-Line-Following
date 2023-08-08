@@ -7,6 +7,12 @@ var robot = await RoboMasterClient.Connect(RoboMasterClient.DIRECT_CONNECT_IP);
 #region State Machine
 var robotState = new StateMachine<RobotState, RobotTrigger>(RobotState.RedStopped);
 
+var intersectionCount = 0;
+robotState.OnTransitioned(transition =>
+{
+    if (transition.Trigger == RobotTrigger.IntersectionDetected) intersectionCount++;
+});
+
 robotState.Configure(RobotState.FollowingRedLine)
     .OnEntryAsync(async () =>
     {
