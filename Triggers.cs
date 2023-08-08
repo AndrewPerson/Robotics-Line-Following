@@ -6,5 +6,7 @@ public enum RobotTrigger
     ObstacleTooClose,
     NoObstacles,
     Pause,
-    Resume
+    Resume,
+    GrabbedBox,
+    ReturnedWithBox
 }

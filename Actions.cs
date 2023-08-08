@@ -2,29 +2,47 @@ using System.Reactive.Linq;
 using RoboMaster;
 using Stateless;
 
-public static class Actions
+public class Actions
 {
-    public static void LookForObstacles(RoboMasterClient robot, StateMachine<RobotState, RobotTrigger> robotState)
+    private RoboMasterClient robot;
+    private StateMachine<RobotState, RobotTrigger> robotState;
+
+    private bool active = false;
+
+    public Actions(RoboMasterClient robot, StateMachine<RobotState, RobotTrigger> robotState)
+    {
+        this.robot = robot;
+        this.robotState = robotState;
+
+        var weakRefThis = new WeakReference<Actions>(this);
+        robotState.OnTransitioned(_ =>
+        {
+            if (weakRefThis.TryGetTarget(out var self))
+            {
+                self.active = false;
+            }
+        });
+    }
+
+    private async Task<bool> SafeFireAsync(RobotTrigger trigger)
+    {
+        if (active) return await robotState.SafeFireAsync(trigger);
+        else return false;
+    }
+
+    private void RunLoop(Func<Task<RobotTrigger?>> action)
     {
         new Thread(async () =>
         {
-            var wasTooClose = false;
-            while (true)
+            while (active)
             {
-                var distance = await robot.GetIRDistance(1);
+                var trigger = await action();
 
-                if (distance < 30)
+                if (trigger != null)
                 {
-                    if (!wasTooClose) await robotState.SafeFireAsync(RobotTrigger.ObstacleTooClose);
-                    wasTooClose = true;
+                    await SafeFireAsync(trigger.Value);
+                    break;
                 }
-                else
-                {
-                    if (wasTooClose) await robotState.SafeFireAsync(RobotTrigger.NoObstacles);
-                    wasTooClose = false;
-                }
-
-                await Task.Delay(100);
             }
         })
         {
@@ -32,56 +50,90 @@ public static class Actions
         }.Start();
     }
 
-    public static void FollowLine(RoboMasterClient robot, StateMachine<RobotState, RobotTrigger> robotState)
+    public void LookForObstacles()
     {
-        new Thread(async () =>
+        RunLoop(async () =>
         {
-            var follower = new Follower();
+            var distance = await robot.GetIRDistance(1);
 
-            foreach (var line in robot.Line.MostRecent(new Line()))
+            if (distance < 30)
             {
-                if (line.Points.Length != 10)
-                {
-                    await robotState.SafeFireAsync(RobotTrigger.NoLineDetected);
-                    break;
-                }
-
-                if (line.Type != LineType.Straight)
-                {
-                    await robotState.SafeFireAsync(RobotTrigger.IntersectionDetected);
-                    break;
-                }
-
-                var (leftSpeed, rightSpeed) = follower.GetWheelSpeed(line);
-
-                await robot.SetWheelSpeed(rightSpeed, leftSpeed);
+                return RobotTrigger.ObstacleTooClose;
             }
-        })
-        {
-            IsBackground = true
-        }.Start();
+
+            await Task.Delay(100);
+
+            return null;
+        });
     }
 
-    public static async Task Stop(RoboMasterClient robot)
+    public void LookForNoObstacles()
+    {
+        RunLoop(async () =>
+        {
+            var distance = await robot.GetIRDistance(1);
+
+            if (distance >= 30)
+            {
+                return RobotTrigger.ObstacleTooClose;
+            }
+
+            await Task.Delay(100);
+
+            return null;
+        });
+    }
+
+    public async Task FollowLine(LineColour lineColour)
+    {
+        await robot.SetLineRecognitionColour(lineColour);
+        
+        var follower = new Follower();
+        var lineEnumerator = robot.Line.MostRecent(new Line()).GetEnumerator();
+
+        RunLoop(async () =>
+        {
+            var line = lineEnumerator.Current;
+            lineEnumerator.MoveNext();
+
+            if (line.Points.Length != 10)
+            {
+                return RobotTrigger.NoLineDetected;
+            }
+
+            if (line.Type != LineType.Straight)
+            {
+                return RobotTrigger.IntersectionDetected;
+            }
+
+            var (leftSpeed, rightSpeed) = follower.GetWheelSpeed(line);
+
+            await robot.SetWheelSpeed(rightSpeed, leftSpeed);
+
+            return null;
+        });
+    }
+
+    public async Task Stop()
     {
         await robot.SetWheelSpeed(0);
     }
 
-    public static void LookForLine(RoboMasterClient robot, StateMachine<RobotState, RobotTrigger> robotState)
+    public void LookForLine()
     {
-        new Thread(async () =>
+        var lineEnumerator = robot.Line.ToAsyncEnumerable().GetAsyncEnumerator();
+
+        RunLoop(async () =>
         {
-            await foreach (var line in robot.Line.ToAsyncEnumerable())
+            var line = lineEnumerator.Current;
+            await lineEnumerator.MoveNextAsync();
+
+            if (line.Points.Length == 10 && line.Type == LineType.Straight)
             {
-                if (line.Points.Length == 10 && line.Type == LineType.Straight)
-                {
-                    await robotState.SafeFireAsync(RobotTrigger.LineDetected);
-                    break;
-                }
+                return RobotTrigger.LineDetected;
             }
-        })
-        {
-            IsBackground = true
-        }.Start();
+
+            return null;
+        });
     }
 }
