@@ -65,7 +65,6 @@ public static class Actions
     public static async Task Stop(RoboMasterClient robot)
     {
         await robot.SetWheelSpeed(0);
-        await robot.SetLEDs(LEDComp.All, 255, 0, 0);
     }
 
     public static void LookForLine(RoboMasterClient robot, StateMachine<RobotState, RobotTrigger> robotState)
