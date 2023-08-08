@@ -22,7 +22,9 @@ public class Follower
         var weights = line.Points.Select((_, index) => PointWeights.Sample(index));
         var weightsSum = weights.Sum();
 
-        var actual = line.Points.Zip(weights).Select(tuple => tuple.Item1.X * (tuple.Item2 / weightsSum)).Sum();
+        var normalisedWeights = weights.Select(weight => weight / weightsSum); // Sums to one
+
+        var actual = line.Points.Zip(normalisedWeights).Select(tuple => tuple.Item1.X * tuple.Item2).Sum();
 
         var pError = TargetX - actual;
         var dError = pError - previousError;
