@@ -10,9 +10,9 @@ public class Follower
     public float DSensitivity { get; set; } = 0.5f;
     public float ISensitivity { get; set; } = 0;
 
-    public ICurve PointWeights = new NormalDistribution(2, 0.5);
+    public ICurve PointWeights { get; set; } = new NormalDistribution(2, 0.5);
 
-    public ICurve ErrorCurve = new SineCurve(1, 90);
+    public ICurve ErrorCurve { get; set; } = new SineCurve(1, 90);
 
     private double previousError = 0;
     private double cumulativeError = 0;
@@ -22,7 +22,7 @@ public class Follower
         var weights = line.Points.Select((_, index) => PointWeights.Sample(index));
         var weightsSum = weights.Sum();
 
-        var actual = line.Points.Zip(weights).Select((tuple, index) => tuple.Item1.X * (tuple.Item2 / weightsSum)).Sum();
+        var actual = line.Points.Zip(weights).Select(tuple => tuple.Item1.X * (tuple.Item2 / weightsSum)).Sum();
 
         var pError = TargetX - actual;
         var dError = pError - previousError;
@@ -49,7 +49,7 @@ public class Follower
         }
         else // Go Right
         {
-            var balance = -ErrorCurve.Sample(totalError);
+            var balance = ErrorCurve.Sample(-totalError);
 
             leftWeight = (float)(balance * -2 + 1);
             rightWeight = 1;
