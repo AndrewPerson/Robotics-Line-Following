@@ -2,6 +2,7 @@ public enum RobotState
 {
     FollowingRedLine,
     FollowingBlueLine,
+    NavigatingIntersection,
     CollectingBox,
         MovingToBox,
         GrabbingBox,
