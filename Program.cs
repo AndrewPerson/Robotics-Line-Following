@@ -78,7 +78,6 @@ robotState.Configure(RobotState.MovingToBox)
 
     .OnEntry(() => Task.Run(async () =>
     {
-        await robot.Move(0, 0, -90);
         await robot.Move(10, 0, 0);
 
         var actions = new Actions(robot, robotState);
