@@ -16,12 +16,12 @@ var robot = await RoboMasterClient.Connect(RoboMasterClient.DIRECT_CONNECT_IP);
 var robotState = new StateMachine<RobotState, RobotTrigger>(RobotState.RedStopped);
 
 var intersectionCount = 0;
-robotState.OnTransitioned(transition =>
+robotState.OnTransitionCompleted(transition =>
 {
-    if (transition.Trigger == RobotTrigger.IntersectionDetected)
+    if (transition.Source == RobotState.FollowingRedLine && transition.Trigger == RobotTrigger.IntersectionDetected)
     {
-        currentConnection = route[intersectionCount];
         intersectionCount++;
+        currentConnection = route[intersectionCount];
     }
 });
 
@@ -37,8 +37,9 @@ robotState.Configure(RobotState.FollowingRedLine)
     .Permit(RobotTrigger.NoLineDetected, RobotState.RedStopped)
     .Permit(RobotTrigger.ObstacleTooClose, RobotState.RedStopped)
     .Permit(RobotTrigger.Pause, RobotState.RedStopped)
+    .PermitIf(RobotTrigger.IntersectionDetected, RobotState.CollectingBox, () => currentConnection == ConnectionType.CollectBox)
     .PermitIf(RobotTrigger.IntersectionDetected, RobotState.FollowingBlueLine, () => currentConnection == ConnectionType.BlueLine)
-    .PermitIf(RobotTrigger.IntersectionDetected, RobotState.NavigatingIntersection, () => currentConnection != ConnectionType.BlueLine);
+    .PermitIf(RobotTrigger.IntersectionDetected, RobotState.NavigatingIntersection, () => currentConnection != ConnectionType.BlueLine && currentConnection != ConnectionType.CollectBox);
 
 robotState.Configure(RobotState.NavigatingIntersection)
     .OnEntryFromAsync(RobotTrigger.NavigateIntersection, async () =>
