@@ -4,42 +4,48 @@ public static class AStar
 {
     public static List<Node<DataT>> FindPath<DataT>(Node<DataT> from, Node<DataT> to, Func<Node<DataT>, float> heuristic)
     {
-        var openSet = new PriorityQueue<Node<DataT>, float>();
-        openSet.Enqueue(from, 0);
+        var toSearch = new PriorityQueue<Node<DataT>, float>();
+        toSearch.Enqueue(from, 0);
 
         var cameFrom = new Dictionary<Node<DataT>, Node<DataT>>();
 
-        var gScore = new Dictionary<Node<DataT>, float>()
+        var shortestPathTo = new Dictionary<Node<DataT>, float>()
         {
             { from, 0 }
         };
-
-        var fScore = new Dictionary<Node<DataT>, float>()
-        {
-            { from, heuristic(from) }
-        };
         
-        while (openSet.Count > 0)
+        while (toSearch.Count > 0)
         {
-            var current = openSet.Dequeue();
+            var current = toSearch.Dequeue();
             if (current == to)
             {
-                // TODO Return path
-                throw new NotImplementedException();
+                var totalPath = new List<Node<DataT>>() { current };
+
+                while (cameFrom.ContainsKey(current))
+                {
+                    current = cameFrom[current];
+                    totalPath.Add(current);
+                }
+
+                totalPath.Reverse();
+
+                return totalPath;
             }
 
             foreach (var (neighbour, cost, _) in current.Connections)
             {
-                var tentativeGScore = gScore.GetValueOrDefault(current, float.MaxValue) + cost;
-                if (tentativeGScore < gScore.GetValueOrDefault(neighbour, float.MaxValue))
+                var pathLengthToNeighbour = shortestPathTo[current] + cost;
+
+                if (!shortestPathTo.ContainsKey(neighbour) || pathLengthToNeighbour < shortestPathTo[neighbour])
                 {
                     cameFrom[neighbour] = current;
-                    gScore[neighbour] = tentativeGScore;
-                    fScore[neighbour] = tentativeGScore + heuristic(neighbour);
+                    shortestPathTo[neighbour] = pathLengthToNeighbour;
+                    
+                    var weighting = pathLengthToNeighbour + heuristic(neighbour);
 
-                    if (!openSet.UnorderedItems.Select(tuple => tuple.Element).Contains(neighbour))
+                    if (!toSearch.UnorderedItems.Select(tuple => tuple.Element).Contains(neighbour))
                     {
-                        openSet.Enqueue(neighbour, -fScore[neighbour]);
+                        toSearch.Enqueue(neighbour, weighting);
                     }
                 }
             }
