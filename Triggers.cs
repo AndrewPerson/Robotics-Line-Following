@@ -11,5 +11,4 @@ public enum RobotTrigger
     FollowBlueLine,
     FinishedNavigatingIntersection,
     GrabbedBox,
-    ReturnedWithBox
 }

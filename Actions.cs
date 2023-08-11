@@ -114,11 +114,6 @@ public class Actions
         });
     }
 
-    public async Task Stop()
-    {
-        await robot.SetWheelSpeed(0);
-    }
-
     public void LookForLine()
     {
         var lineEnumerator = robot.Line.ToAsyncEnumerable().GetAsyncEnumerator();
