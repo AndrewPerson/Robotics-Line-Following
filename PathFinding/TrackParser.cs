@@ -62,14 +62,6 @@ public static class TrackParser
             }
 
             firstNode.Connections.Add((secondNode, length, connectionType));
-            secondNode.Connections.Add((firstNode, length, connectionType switch
-            {
-                ConnectionTypeEnum.Left => ConnectionTypeEnum.Right,
-                ConnectionTypeEnum.Right => ConnectionTypeEnum.Left,
-                ConnectionTypeEnum.Forward => ConnectionTypeEnum.Forward,
-                ConnectionTypeEnum.BlueLine => ConnectionTypeEnum.BlueLine,
-                _ => throw new ArgumentOutOfRangeException(nameof(connectionType), connectionType, null)
-            }));
         }
 
         return nodes;

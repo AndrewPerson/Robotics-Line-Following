@@ -8,6 +8,7 @@ public enum RobotTrigger
     Pause,
     Resume,
     NavigateIntersection,
+    CollectBox,
     FollowBlueLine,
     FinishedNavigatingIntersection,
     GrabbedBox,

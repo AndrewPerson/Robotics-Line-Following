@@ -1,5 +1,7 @@
 namespace PathFinding.AStar;
 
+public record struct Node<DataT>(List<(Node<DataT>, float, DataT)> Connections);
+
 public static class AStar
 {
     public static List<Node<DataT>> FindPath<DataT>(Node<DataT> from, Node<DataT> to, Func<Node<DataT>, float> heuristic)

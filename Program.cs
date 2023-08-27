@@ -4,10 +4,11 @@ using Stateless;
 
 using PathFinding;
 
-var trackText = await File.ReadAllTextAsync("track.txt");
-var track = TrackParser.ParseTrack(trackText);
+// var trackText = await File.ReadAllTextAsync("track.txt");
+// var track = TrackParser.ParseTrack(trackText);
 
-var route = RoutePlanner.FindRoute(track["start"], track["end"]);
+// var route = RoutePlanner.FindRoute(track["1"], track["5"]);
+var route = new List<ConnectionType>() { ConnectionType.Forward, ConnectionType.Forward, ConnectionType.BlueLine, ConnectionType.Left, ConnectionType.BlueLine, ConnectionType.BlueLine, ConnectionType.CollectBox };
 
 var intersectionCount = 0;
 var currentConnection = route[0];
@@ -17,12 +18,17 @@ var robot = await RoboMasterClient.Connect(RoboMasterClient.DIRECT_CONNECT_IP);
 #region State Machine
 var robotState = new StateMachine<RobotState, RobotTrigger>(RobotState.RedStopped);
 
+robotState.OnTransitioned(transition =>
+{
+    Console.WriteLine($"Transitioning to {transition.Destination} because ${transition.Trigger}");
+});
+
 robotState.Configure(RobotState.FollowingRedLine)
     .OnEntryAsync(async () =>
     {
         var actions = new Actions(robot, robotState);
 
-        actions.LookForObstacles();
+        // actions.LookForObstacles();
         await actions.FollowLine(LineColour.Red);
     })
 
@@ -39,37 +45,62 @@ robotState.Configure(RobotState.FollowingRedLine)
     .Permit(RobotTrigger.NoLineDetected, RobotState.RedStopped)
     .Permit(RobotTrigger.ObstacleTooClose, RobotState.RedStopped)
     .Permit(RobotTrigger.Pause, RobotState.RedStopped)
-    .PermitIf(RobotTrigger.IntersectionDetected, RobotState.CollectingBox, () => currentConnection == ConnectionType.CollectBox)
-    .PermitIf(RobotTrigger.IntersectionDetected, RobotState.FollowingBlueLine, () => currentConnection == ConnectionType.BlueLine)
-    .PermitIf(RobotTrigger.IntersectionDetected, RobotState.NavigatingIntersection, () => currentConnection != ConnectionType.BlueLine && currentConnection != ConnectionType.CollectBox);
+    .Permit(RobotTrigger.IntersectionDetected, RobotState.NavigatingIntersection);
 
 robotState.Configure(RobotState.NavigatingIntersection)
-    .OnEntryFromAsync(RobotTrigger.NavigateIntersection, async () =>
+    .OnEntry(() => Task.Run(async () =>
     {
-        await robot.Move(0, 0, currentConnection switch
+        Console.WriteLine(currentConnection);
+
+        if (currentConnection == ConnectionType.CollectBox)
         {
-            ConnectionType.Left => -90,
-            ConnectionType.Right => 90,
-            _ => 0
-        });
+            await robotState.SafeFireAsync(RobotTrigger.CollectBox);
+        }
+        else if (currentConnection == ConnectionType.BlueLine)
+        {
+            await robotState.SafeFireAsync(RobotTrigger.FollowBlueLine);
+        }
+        else
+        {
+            await robot.Move(0, 0, currentConnection switch
+            {
+                ConnectionType.Left => -90,
+                ConnectionType.Right => 90,
+                _ => 0
+            });
 
-        await robot.Move(20, 0, 0);
+            await Task.Delay(2000);
 
-        await robotState.SafeFireAsync(RobotTrigger.FinishedNavigatingIntersection);
-    })
+            await robot.Move(0.4f, 0, 0);
 
+            await Task.Delay(2000);
+
+            await robotState.SafeFireAsync(RobotTrigger.FinishedNavigatingIntersection);
+        }
+    }))
+
+    .Permit(RobotTrigger.CollectBox, RobotState.CollectingBox)
+    .Permit(RobotTrigger.FollowBlueLine, RobotState.FollowingBlueLine)
     .Permit(RobotTrigger.FinishedNavigatingIntersection, RobotState.FollowingRedLine);
 
 robotState.Configure(RobotState.FollowingBlueLine)
     .OnEntryAsync(async () =>
     {
+        await robot.Move(0.2f, 0, 0);
+        await Task.Delay(2000);
+
         var actions = new Actions(robot, robotState);
 
-        actions.LookForObstacles();
+        // actions.LookForObstacles();
         await actions.FollowLine(LineColour.Blue);
     })
 
-    .OnExitAsync(async () => await robot.SetWheelSpeed(0))
+    .OnExitAsync(async () =>
+    {
+        await robot.Move(0.2f, 0, 0);
+        await Task.Delay(2000);
+        await robot.SetWheelSpeed(0);
+    })
 
     .Permit(RobotTrigger.ObstacleTooClose, RobotState.BlueStopped)
     .Permit(RobotTrigger.Pause, RobotState.BlueStopped)
@@ -85,10 +116,12 @@ robotState.Configure(RobotState.MovingToBox)
     .OnEntry(() => Task.Run(async () =>
     {
         await robot.Move(0, 0, -90);
-        await robot.Move(10, 0, 0);
+        await Task.Delay(2000);
+        await robot.Move(0.1f, 0, 0);
+        await Task.Delay(2000);
 
         var actions = new Actions(robot, robotState);
-        actions.LookForObstacles();
+        actions.LookForObstacles(4);
         await actions.FollowLine(LineColour.Red);
     }))
 
@@ -103,7 +136,10 @@ robotState.Configure(RobotState.GrabbingBox)
 
     .OnEntry(() => Task.Run(async () =>
     {
-        // TODO use the gripper
+        await robot.MoveArm(86, 100);
+        await robot.CloseGripper();
+        await robot.MoveArm(72, 174);
+
         await robotState.SafeFireAsync(RobotTrigger.GrabbedBox);
     }))
 
@@ -112,19 +148,21 @@ robotState.Configure(RobotState.GrabbingBox)
 robotState.Configure(RobotState.ReturningWithBox)
     .SubstateOf(RobotState.CollectingBox)
 
-    .OnEntryAsync(async () =>
+    .OnEntry(() => Task.Run(async () =>
     {
         await robot.Move(0, 0, 180);
+        await Task.Delay(2000);
 
         var actions = new Actions(robot, robotState);
 
         await actions.FollowLine(LineColour.Red);
-    })
+    }))
 
     .OnExitAsync(async () =>
     {
         await robot.SetWheelSpeed(0);
         await robot.Move(0, 0, 90);
+        await Task.Delay(2000);
     })
 
     .Permit(RobotTrigger.IntersectionDetected, RobotState.FollowingRedLine)

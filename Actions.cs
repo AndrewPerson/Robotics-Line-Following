@@ -7,7 +7,7 @@ public class Actions
     private RoboMasterClient robot;
     private StateMachine<RobotState, RobotTrigger> robotState;
 
-    private bool active = false;
+    private bool active = true;
 
     public Actions(RoboMasterClient robot, StateMachine<RobotState, RobotTrigger> robotState)
     {
@@ -26,7 +26,11 @@ public class Actions
 
     private async Task<bool> SafeFireAsync(RobotTrigger trigger)
     {
-        if (active) return await robotState.SafeFireAsync(trigger);
+        if (active)
+        {
+            active = false;
+            return await robotState.SafeFireAsync(trigger);
+        }
         else return false;
     }
 
@@ -50,13 +54,13 @@ public class Actions
         }.Start();
     }
 
-    public void LookForObstacles()
+    public void LookForObstacles(float minDistance = 30)
     {
         RunLoop(async () =>
         {
             var distance = await robot.GetIRDistance(1);
 
-            if (distance < 30)
+            if (distance < minDistance)
             {
                 return RobotTrigger.ObstacleTooClose;
             }
@@ -89,19 +93,26 @@ public class Actions
         await robot.SetLineRecognitionColour(lineColour);
         
         var follower = new Follower();
-        var lineEnumerator = robot.Line.MostRecent(new Line()).GetEnumerator();
+
+        var didSeeIntersection = false;
+        
+        var lineEnumerator = robot.Line.ToDroppingAsyncEnumerable().GetAsyncEnumerator();
 
         RunLoop(async () =>
         {
             var line = lineEnumerator.Current;
-            lineEnumerator.MoveNext();
+            await lineEnumerator.MoveNextAsync();
 
-            if (line.Points.Length != 10)
+            if (line.Type == LineType.None || line.Points.Length == 0)
             {
                 return RobotTrigger.NoLineDetected;
             }
 
-            if (line.Type != LineType.Straight)
+            if (line.Type == LineType.Intersection)
+            {
+                didSeeIntersection = true;
+            }
+            else if (didSeeIntersection)
             {
                 return RobotTrigger.IntersectionDetected;
             }
@@ -116,12 +127,12 @@ public class Actions
 
     public void LookForLine()
     {
-        var lineEnumerator = robot.Line.ToAsyncEnumerable().GetAsyncEnumerator();
+        var lineEnumerator = robot.Line.ToDroppingAsyncEnumerable().GetAsyncEnumerator();
 
         RunLoop(async () =>
         {
-            var line = lineEnumerator.Current;
             await lineEnumerator.MoveNextAsync();
+            var line = lineEnumerator.Current;
 
             if (line.Points.Length == 10 && line.Type == LineType.Straight)
             {

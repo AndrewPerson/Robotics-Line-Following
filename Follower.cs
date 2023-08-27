@@ -2,17 +2,17 @@ using RoboMaster;
 
 public class Follower
 {
-    public float BaseWheelSpeed { get; set; } = 150;
+    public float BaseWheelSpeed { get; set; } = 100;
 
     public float TargetX { get; set; } = 0.35f;
 
-    public float PSensitivity { get; set; } = 1;
-    public float DSensitivity { get; set; } = 0.5f;
+    public float PSensitivity { get; set; } = 3f;
+    public float DSensitivity { get; set; } = 2f;
     public float ISensitivity { get; set; } = 0;
 
-    public ICurve PointWeights { get; set; } = new NormalDistribution(2, 0.5);
+    public ICurve PointWeights { get; set; } = new NormalDistribution(0, 0.6);
 
-    public ICurve ErrorCurve { get; set; } = new SineCurve(1, 90);
+    public ICurve ErrorCurve { get; set; } = new StraightLine();
 
     private double previousError = 0;
     private double cumulativeError = 0;
@@ -42,16 +42,18 @@ public class Follower
             leftWeight = 1;
             rightWeight = 1;
         }
-        else if (totalError > 1) // Go Left
+        else if (totalError < 0) // Go Left
         {
-            var balance = ErrorCurve.Sample(totalError);
+            // var balance = ErrorCurve.Sample(totalError);
+            var balance = -totalError;
 
             leftWeight = 1;
             rightWeight = (float)(balance * -2 + 1);
         }
         else // Go Right
         {
-            var balance = ErrorCurve.Sample(-totalError);
+            // var balance = ErrorCurve.Sample(-totalError);
+            var balance = totalError;
 
             leftWeight = (float)(balance * -2 + 1);
             rightWeight = 1;
