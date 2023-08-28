@@ -43,7 +43,6 @@ public class DroppingAsyncEnumerable<T> : IAsyncEnumerable<T>
 
     private class DroppingAsyncEnumerator<T> : IAsyncEnumerator<T>
     {
-        private IObservable<T> observable;
         private CancellationToken cancellationToken;
 
         private T current;
@@ -53,7 +52,6 @@ public class DroppingAsyncEnumerable<T> : IAsyncEnumerable<T>
 
         public DroppingAsyncEnumerator(IObservable<T> observable, CancellationToken cancellationToken)
         {
-            this.observable = observable;
             this.cancellationToken = cancellationToken;
 
             observable.Subscribe(OnNext, OnError, OnCompleted);

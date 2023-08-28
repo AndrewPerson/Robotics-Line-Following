@@ -71,13 +71,13 @@ public class Actions
         });
     }
 
-    public void LookForNoObstacles()
+    public void LookForNoObstacles(float minDistance = 30)
     {
         RunLoop(async () =>
         {
             var distance = await robot.GetIRDistance(1);
 
-            if (distance >= 30)
+            if (distance >= minDistance)
             {
                 return RobotTrigger.ObstacleTooClose;
             }
@@ -88,20 +88,21 @@ public class Actions
         });
     }
 
-    public async Task FollowLine(LineColour lineColour)
+    public async Task FollowLine(LineColour lineColour, float? speed = null)
     {
         await robot.SetLineRecognitionColour(lineColour);
         
         var follower = new Follower();
+        if (speed != null) follower.BaseWheelSpeed = speed.Value;
 
         var didSeeIntersection = false;
-        
+
         var lineEnumerator = robot.Line.ToDroppingAsyncEnumerable().GetAsyncEnumerator();
+        await lineEnumerator.MoveNextAsync();
 
         RunLoop(async () =>
         {
             var line = lineEnumerator.Current;
-            await lineEnumerator.MoveNextAsync();
 
             if (line.Type == LineType.None || line.Points.Length == 0)
             {
@@ -119,7 +120,7 @@ public class Actions
 
             var (leftSpeed, rightSpeed) = follower.GetWheelSpeed(line);
 
-            await robot.SetWheelSpeed(rightSpeed, leftSpeed);
+            await Task.WhenAll(robot.SetWheelSpeed(rightSpeed, leftSpeed), lineEnumerator.MoveNextAsync().AsTask());
 
             return null;
         });

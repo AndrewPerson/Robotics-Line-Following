@@ -4,16 +4,18 @@ namespace PathFinding;
 
 public static class RoutePlanner
 {
-    public static List<ConnectionType> FindRoute(Node<ConnectionType> from, Node<ConnectionType> to)
+    public static List<ConnectionType> FindRoute(Node<ConnectionType> start, Node<ConnectionType> pickup, Node<ConnectionType> drop)
     {
-        var thereRoute = GetRouteFromPath(AStar.AStar.FindPath(from, to, node => 0)); // TODO Implement heuristic
-        var returnRoute = GetRouteFromPath(AStar.AStar.FindPath(to, from, node => 0));
+        var pickupRoute = GetRouteFromPath(AStar.AStar.FindPath(start, pickup, node => 0)); // TODO Implement heuristic
+        var dropRoute = GetRouteFromPath(AStar.AStar.FindPath(pickup, drop, node => 0));
+        dropRoute.RemoveAt(0); // Remove the first connection, which is the one we're currently on when we finish collecting the box
 
-        var route = new List<ConnectionType>(thereRoute.Count + 1 + returnRoute.Count);
+        var route = new List<ConnectionType>(pickupRoute.Count + dropRoute.Count + 2);
 
-        route.AddRange(thereRoute);
+        route.AddRange(pickupRoute);
         route.Add(ConnectionType.CollectBox);
-        route.AddRange(returnRoute);
+        route.AddRange(dropRoute);
+        route.Add(ConnectionType.DropBox);
 
         return route;
     }
@@ -41,5 +43,6 @@ public enum ConnectionType
     Left,
     Right,
     BlueLine,
-    CollectBox
+    CollectBox,
+    DropBox
 }

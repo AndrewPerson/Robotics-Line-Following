@@ -1,19 +1,48 @@
 using System.Reactive.Linq;
+using System.Diagnostics;
+
 using RoboMaster;
 using Stateless;
 
 using PathFinding;
 
-// var trackText = await File.ReadAllTextAsync("track.txt");
-// var track = TrackParser.ParseTrack(trackText);
+var trackText = await File.ReadAllTextAsync("track.txt");
+var track = TrackParser.ParseTrack(trackText);
 
-// var route = RoutePlanner.FindRoute(track["1"], track["5"]);
-var route = new List<ConnectionType>() { ConnectionType.Forward, ConnectionType.Forward, ConnectionType.BlueLine, ConnectionType.Left, ConnectionType.BlueLine, ConnectionType.BlueLine, ConnectionType.CollectBox };
+var robot = await RoboMasterClient.Connect(RoboMasterClient.DIRECT_CONNECT_IP);
+
+Console.WriteLine("Show start intersection marker...");
+
+var startMarker = (await robot.Markers.Where(marker => marker.Length > 0).FirstAsync())[0];
+var start = startMarker.Data.IsChar ? startMarker.Data.Char.ToString() : startMarker.Data.Int.ToString();
+
+Console.WriteLine($"Saw marker for intersection {start}");
+
+Debug.Assert(track.ContainsKey(start), "Start intersection not found");
+
+Console.WriteLine("Show pickup intersection marker...");
+
+var pickupMarker = (await robot.Markers.Where(marker => marker.Length > 0).FirstAsync())[0];
+var pickup = pickupMarker.Data.IsChar ? pickupMarker.Data.Char.ToString() : pickupMarker.Data.Int.ToString();
+
+Console.WriteLine($"Saw marker for intersection {pickup}");
+
+Debug.Assert(track.ContainsKey(pickup), "Pickup intersection not found");
+
+Console.WriteLine("Show drop intersection marker...");
+
+var dropMarker = (await robot.Markers.Where(marker => marker.Length > 0).FirstAsync())[0];
+var drop = dropMarker.Data.IsChar ? dropMarker.Data.Char.ToString() : dropMarker.Data.Int.ToString();
+
+Console.WriteLine($"Saw marker for intersection {drop}");
+
+Debug.Assert(track.ContainsKey(drop), "Drop intersection not found");
+
+var route = RoutePlanner.FindRoute(track[start], track[pickup], track[drop]);
+Console.WriteLine($"Route: {string.Join(", ", route)}");
 
 var intersectionCount = 0;
 var currentConnection = route[0];
-
-var robot = await RoboMasterClient.Connect(RoboMasterClient.DIRECT_CONNECT_IP);
 
 #region State Machine
 var robotState = new StateMachine<RobotState, RobotTrigger>(RobotState.RedStopped);
@@ -51,17 +80,31 @@ robotState.Configure(RobotState.NavigatingIntersection)
     .OnEntry(() => Task.Run(async () =>
     {
         Console.WriteLine(currentConnection);
+        Console.WriteLine(intersectionCount);
 
         if (currentConnection == ConnectionType.CollectBox)
         {
-            await robotState.SafeFireAsync(RobotTrigger.CollectBox);
+            _ = Task.Run(() => robotState.SafeFireAsync(RobotTrigger.CollectBox));
+        }
+        else if (currentConnection == ConnectionType.DropBox)
+        {
+            _ = Task.Run(() => robotState.SafeFireAsync(RobotTrigger.DropBox));
         }
         else if (currentConnection == ConnectionType.BlueLine)
         {
-            await robotState.SafeFireAsync(RobotTrigger.FollowBlueLine);
+            _ = Task.Run(() => robotState.SafeFireAsync(RobotTrigger.FollowBlueLine));
         }
         else
         {
+            await robot.Move(currentConnection switch
+            {
+                ConnectionType.Left or ConnectionType.Right => 0.3f,
+                ConnectionType.Forward => 0.2f,
+                _ => 0
+            }, 0, 0);
+
+            await Task.Delay(3000);
+
             await robot.Move(0, 0, currentConnection switch
             {
                 ConnectionType.Left => -90,
@@ -69,36 +112,42 @@ robotState.Configure(RobotState.NavigatingIntersection)
                 _ => 0
             });
 
-            await Task.Delay(2000);
+            await Task.Delay(currentConnection switch
+            {
+                ConnectionType.Left or ConnectionType.Right => 3000,
+                _ => 0
+            });
 
-            await robot.Move(0.4f, 0, 0);
+            Console.WriteLine("I HAVE FINISHED MOVING!");
 
-            await Task.Delay(2000);
-
-            await robotState.SafeFireAsync(RobotTrigger.FinishedNavigatingIntersection);
+            _ = Task.Run(() => robotState.SafeFireAsync(RobotTrigger.FinishedNavigatingIntersection));
         }
     }))
 
     .Permit(RobotTrigger.CollectBox, RobotState.CollectingBox)
+    .Permit(RobotTrigger.DropBox, RobotState.DroppingBox)
     .Permit(RobotTrigger.FollowBlueLine, RobotState.FollowingBlueLine)
     .Permit(RobotTrigger.FinishedNavigatingIntersection, RobotState.FollowingRedLine);
 
 robotState.Configure(RobotState.FollowingBlueLine)
+    .SubstateOf(RobotState.NavigatingIntersection)
+
     .OnEntryAsync(async () =>
     {
-        await robot.Move(0.2f, 0, 0);
-        await Task.Delay(2000);
-
         var actions = new Actions(robot, robotState);
 
         // actions.LookForObstacles();
         await actions.FollowLine(LineColour.Blue);
     })
 
-    .OnExitAsync(async () =>
+    .OnExitAsync(async transition =>
     {
-        await robot.Move(0.2f, 0, 0);
-        await Task.Delay(2000);
+        if (transition.Trigger == RobotTrigger.IntersectionDetected)
+        {
+            await robot.Move(0.2f, 0, 0);
+            await Task.Delay(2000);
+        }
+
         await robot.SetWheelSpeed(0);
     })
 
@@ -113,17 +162,21 @@ robotState.Configure(RobotState.CollectingBox)
 robotState.Configure(RobotState.MovingToBox)
     .SubstateOf(RobotState.CollectingBox)
 
-    .OnEntry(() => Task.Run(async () =>
+    .OnEntryAsync(async () =>
     {
         await robot.Move(0, 0, -90);
-        await Task.Delay(2000);
+        await Task.Delay(3000);
+
         await robot.Move(0.1f, 0, 0);
         await Task.Delay(2000);
 
+        await Utils.CenterOnLine(robot, LineColour.Red, 0.35f, 0.05f);
+
         var actions = new Actions(robot, robotState);
-        actions.LookForObstacles(4);
-        await actions.FollowLine(LineColour.Red);
-    }))
+
+        actions.LookForObstacles(15);
+        await actions.FollowLine(LineColour.Red, 40);
+    })
 
     .OnExitAsync(async () => await robot.SetWheelSpeed(0))
 
@@ -136,11 +189,16 @@ robotState.Configure(RobotState.GrabbingBox)
 
     .OnEntry(() => Task.Run(async () =>
     {
-        await robot.MoveArm(86, 100);
-        await robot.CloseGripper();
-        await robot.MoveArm(72, 174);
+        await robot.SetArmPosition(119, 92);
+        await Task.Delay(2000);
 
-        await robotState.SafeFireAsync(RobotTrigger.GrabbedBox);
+        await robot.CloseGripper();
+        await Task.Delay(2000);
+
+        await robot.SetArmPosition(73, 159);
+        await Task.Delay(2000);
+
+        _ = Task.Run(() => robotState.SafeFireAsync(RobotTrigger.GrabbedBox));
     }))
 
     .Permit(RobotTrigger.GrabbedBox, RobotState.ReturningWithBox);
@@ -151,22 +209,84 @@ robotState.Configure(RobotState.ReturningWithBox)
     .OnEntry(() => Task.Run(async () =>
     {
         await robot.Move(0, 0, 180);
+        await Task.Delay(10000);
+
+        await robot.Move(0.3f, 0, 0);
         await Task.Delay(2000);
+
+        await robot.Move(0, 0, -90);
+        await Task.Delay(3000);
+
+        _ = Task.Run(() => robotState.SafeFireAsync(RobotTrigger.ReturnedWithBox));
+    }))
+
+    .Permit(RobotTrigger.ReturnedWithBox, RobotState.FollowingRedLine);
+
+robotState.Configure(RobotState.DroppingBox)
+    .InitialTransition(RobotState.MovingToDropPoint);
+
+robotState.Configure(RobotState.MovingToDropPoint)
+    .SubstateOf(RobotState.DroppingBox)
+
+    .OnEntryAsync(async () =>
+    {
+        await robot.Move(0, 0, -90);
+        await Task.Delay(3000);
+
+        await robot.Move(0.1f, 0, 0);
+        await Task.Delay(2000);
+
+        await Utils.CenterOnLine(robot, LineColour.Red, 0.35f, 0.05f);
 
         var actions = new Actions(robot, robotState);
 
-        await actions.FollowLine(LineColour.Red);
-    }))
-
-    .OnExitAsync(async () =>
-    {
-        await robot.SetWheelSpeed(0);
-        await robot.Move(0, 0, 90);
-        await Task.Delay(2000);
+        actions.LookForObstacles(15);
+        await actions.FollowLine(LineColour.Red, 40);
     })
 
-    .Permit(RobotTrigger.IntersectionDetected, RobotState.FollowingRedLine)
-    .Permit(RobotTrigger.NoLineDetected, RobotState.FollowingRedLine);
+    .OnExitAsync(async () => await robot.SetWheelSpeed(0))
+
+    .Permit(RobotTrigger.ObstacleTooClose, RobotState.PlacingBox)
+    .Permit(RobotTrigger.NoLineDetected, RobotState.PlacingBox)
+    .Permit(RobotTrigger.IntersectionDetected, RobotState.PlacingBox);
+
+robotState.Configure(RobotState.PlacingBox)
+    .SubstateOf(RobotState.DroppingBox)
+
+    .OnEntry(() => Task.Run(async () =>
+    {
+        await robot.SetArmPosition(119, 92);
+        await Task.Delay(2000);
+
+        await robot.OpenGripper();
+        await Task.Delay(2000);
+
+        await robot.SetArmPosition(73, 159);
+        await Task.Delay(2000);
+
+        _ = Task.Run(() => robotState.SafeFireAsync(RobotTrigger.DroppedBox));
+    }))
+
+    .Permit(RobotTrigger.DroppedBox, RobotState.ReturningDropPoint);
+
+robotState.Configure(RobotState.ReturningDropPoint)
+    .SubstateOf(RobotState.DroppingBox)
+
+    .OnEntry(() => Task.Run(async () =>
+    {
+        await robot.Move(0, 0, 180);
+        await Task.Delay(10000);
+
+        await robot.Move(0.3f, 0, 0);
+        await Task.Delay(2000);
+
+        await robot.Move(0, 0, -90);
+        await Task.Delay(3000);
+
+        _ = Task.Run(() => robotState.SafeFireAsync(RobotTrigger.ReturnedFromDropPoint));
+    }))
+
+    .Permit(RobotTrigger.ReturnedFromDropPoint, RobotState.FollowingRedLine);
 
 var stoppedReasons = new HashSet<RobotTrigger>() { RobotTrigger.Pause };
 robotState.Configure(RobotState.Stopped)
@@ -197,16 +317,40 @@ robotState.Configure(RobotState.BlueStopped)
     .PermitIf(RobotTrigger.Resume, RobotState.FollowingBlueLine, () => stoppedReasons.Count == 1 && stoppedReasons.Contains(RobotTrigger.Pause));
 #endregion
 
-Console.WriteLine("Paused. Press any key to start...");
-await Task.WhenAny(Task.Run(Console.ReadKey));
+Console.Write("Enter direct control mode? (y/n, default n): ");
 
-await robot.SetLineRecognitionEnabled();
-await robot.SetIrEnabled();
-await robotState.FireAsync(RobotTrigger.Resume);
+if (Console.ReadKey().KeyChar == 'y')
+{
+    Console.WriteLine();
+    Console.WriteLine("Direct control mode enabled");
 
-Console.WriteLine("Press any key to stop...");
-await Task.WhenAny(Task.Run(Console.ReadKey));
 
-await robotState.SafeFireAsync(RobotTrigger.Pause);
+    Console.Write("Enter command: ");
+    var command = (Console.ReadLine() ?? "").Split(' ');
+
+    while (command.Length != 0)
+    {
+        await robot.Do(command.Select(arg => new CommandArg(arg)).ToArray());
+
+        Console.Write("Enter command: ");
+        command = (Console.ReadLine() ?? "").Split(' ');
+    }
+}
+else
+{
+    await robot.OpenGripper();
+
+    Console.WriteLine("Paused. Press any key to start...");
+    await Task.WhenAny(Task.Run(Console.ReadKey));
+
+    await robot.SetLineRecognitionEnabled();
+    await robot.SetIrEnabled();
+    await robotState.FireAsync(RobotTrigger.Resume);
+
+    Console.WriteLine("Press any key to stop...");
+    await Task.WhenAny(Task.Run(Console.ReadKey));
+
+    await robotState.SafeFireAsync(RobotTrigger.Pause);
+}
 
 robot.Dispose();

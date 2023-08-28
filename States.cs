@@ -7,6 +7,10 @@ public enum RobotState
         MovingToBox,
         GrabbingBox,
         ReturningWithBox,
+    DroppingBox,
+        MovingToDropPoint,
+        PlacingBox,
+        ReturningDropPoint,
     Stopped,
         RedStopped,
         BlueStopped
