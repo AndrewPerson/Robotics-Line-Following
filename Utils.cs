@@ -11,6 +11,8 @@ public static class Utils
         {
             var x = line.Points[0].X;
 
+            Console.WriteLine(x);
+
             if (Math.Abs(x - targetX) < margin)
             {
                 await robot.SetWheelSpeed(0);
@@ -20,11 +22,11 @@ public static class Utils
             // TODO The wheel speeds might be reversed
             if (x < targetX) // Go Left
             {
-                await robot.SetWheelSpeed(50, 50, -50, -50);
+                await robot.SetWheelSpeed(50, -50, -50, 50);
             }
             else // Go Right
             {
-                await robot.SetWheelSpeed(-50, -50, 50, 50);
+                await robot.SetWheelSpeed(-50, 50, 50, -50);
             }
         }
     }

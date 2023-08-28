@@ -9,33 +9,22 @@ using PathFinding;
 var trackText = await File.ReadAllTextAsync("track.txt");
 var track = TrackParser.ParseTrack(trackText);
 
-var robot = await RoboMasterClient.Connect(RoboMasterClient.DIRECT_CONNECT_IP);
+Console.Write("Enter start intersection: ");
+var start = Console.ReadLine();
 
-Console.WriteLine("Show start intersection marker...");
-
-var startMarker = (await robot.Markers.Where(marker => marker.Length > 0).FirstAsync())[0];
-var start = startMarker.Data.IsChar ? startMarker.Data.Char.ToString() : startMarker.Data.Int.ToString();
-
-Console.WriteLine($"Saw marker for intersection {start}");
-
+Debug.Assert(start != null, "Start intersection name is null");
 Debug.Assert(track.ContainsKey(start), "Start intersection not found");
 
-Console.WriteLine("Show pickup intersection marker...");
+Console.Write("Enter pickup intersection: ");
+var pickup = Console.ReadLine();
 
-var pickupMarker = (await robot.Markers.Where(marker => marker.Length > 0).FirstAsync())[0];
-var pickup = pickupMarker.Data.IsChar ? pickupMarker.Data.Char.ToString() : pickupMarker.Data.Int.ToString();
-
-Console.WriteLine($"Saw marker for intersection {pickup}");
-
+Debug.Assert(pickup != null, "Pickup intersection name is null");
 Debug.Assert(track.ContainsKey(pickup), "Pickup intersection not found");
 
-Console.WriteLine("Show drop intersection marker...");
+Console.Write("Enter drop intersection: ");
+var drop = Console.ReadLine();
 
-var dropMarker = (await robot.Markers.Where(marker => marker.Length > 0).FirstAsync())[0];
-var drop = dropMarker.Data.IsChar ? dropMarker.Data.Char.ToString() : dropMarker.Data.Int.ToString();
-
-Console.WriteLine($"Saw marker for intersection {drop}");
-
+Debug.Assert(drop != null, "Drop intersection name is null");
 Debug.Assert(track.ContainsKey(drop), "Drop intersection not found");
 
 var route = RoutePlanner.FindRoute(track[start], track[pickup], track[drop]);
@@ -43,6 +32,8 @@ Console.WriteLine($"Route: {string.Join(", ", route)}");
 
 var intersectionCount = 0;
 var currentConnection = route[0];
+
+var robot = await RoboMasterClient.Connect(RoboMasterClient.DIRECT_CONNECT_IP);
 
 #region State Machine
 var robotState = new StateMachine<RobotState, RobotTrigger>(RobotState.RedStopped);
@@ -103,7 +94,12 @@ robotState.Configure(RobotState.NavigatingIntersection)
                 _ => 0
             }, 0, 0);
 
-            await Task.Delay(3000);
+            await Task.Delay(currentConnection switch
+            {
+                ConnectionType.Left or ConnectionType.Right => 3000,
+                ConnectionType.Forward => 2000,
+                _ => 0
+            });
 
             await robot.Move(0, 0, currentConnection switch
             {
@@ -162,12 +158,12 @@ robotState.Configure(RobotState.CollectingBox)
 robotState.Configure(RobotState.MovingToBox)
     .SubstateOf(RobotState.CollectingBox)
 
-    .OnEntryAsync(async () =>
+    .OnEntry(() => Task.Run(async () =>
     {
         await robot.Move(0, 0, -90);
         await Task.Delay(3000);
 
-        await robot.Move(0.1f, 0, 0);
+        await robot.Move(0.1f, 0.1f, 0);
         await Task.Delay(2000);
 
         await Utils.CenterOnLine(robot, LineColour.Red, 0.35f, 0.05f);
@@ -176,7 +172,7 @@ robotState.Configure(RobotState.MovingToBox)
 
         actions.LookForObstacles(15);
         await actions.FollowLine(LineColour.Red, 40);
-    })
+    }))
 
     .OnExitAsync(async () => await robot.SetWheelSpeed(0))
 
@@ -189,7 +185,7 @@ robotState.Configure(RobotState.GrabbingBox)
 
     .OnEntry(() => Task.Run(async () =>
     {
-        await robot.SetArmPosition(119, 92);
+        await robot.SetArmPosition(160, 100);
         await Task.Delay(2000);
 
         await robot.CloseGripper();
@@ -228,12 +224,12 @@ robotState.Configure(RobotState.DroppingBox)
 robotState.Configure(RobotState.MovingToDropPoint)
     .SubstateOf(RobotState.DroppingBox)
 
-    .OnEntryAsync(async () =>
+    .OnEntry(() => Task.Run(async () =>
     {
         await robot.Move(0, 0, -90);
         await Task.Delay(3000);
 
-        await robot.Move(0.1f, 0, 0);
+        await robot.Move(0.1f, 0.1f, 0);
         await Task.Delay(2000);
 
         await Utils.CenterOnLine(robot, LineColour.Red, 0.35f, 0.05f);
@@ -242,7 +238,7 @@ robotState.Configure(RobotState.MovingToDropPoint)
 
         actions.LookForObstacles(15);
         await actions.FollowLine(LineColour.Red, 40);
-    })
+    }))
 
     .OnExitAsync(async () => await robot.SetWheelSpeed(0))
 
@@ -255,7 +251,7 @@ robotState.Configure(RobotState.PlacingBox)
 
     .OnEntry(() => Task.Run(async () =>
     {
-        await robot.SetArmPosition(119, 92);
+        await robot.SetArmPosition(160, 100);
         await Task.Delay(2000);
 
         await robot.OpenGripper();
