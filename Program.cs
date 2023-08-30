@@ -114,8 +114,6 @@ robotState.Configure(RobotState.NavigatingIntersection)
                 _ => 0
             });
 
-            Console.WriteLine("I HAVE FINISHED MOVING!");
-
             _ = Task.Run(() => robotState.SafeFireAsync(RobotTrigger.FinishedNavigatingIntersection));
         }
     }))
@@ -140,8 +138,8 @@ robotState.Configure(RobotState.FollowingBlueLine)
     {
         if (transition.Trigger == RobotTrigger.IntersectionDetected)
         {
-            await robot.Move(0.2f, 0, 0);
-            await Task.Delay(2000);
+            await robot.SetWheelSpeed(60);
+            await Task.Delay(500);
         }
 
         await robot.SetWheelSpeed(0);
@@ -158,21 +156,7 @@ robotState.Configure(RobotState.CollectingBox)
 robotState.Configure(RobotState.MovingToBox)
     .SubstateOf(RobotState.CollectingBox)
 
-    .OnEntry(() => Task.Run(async () =>
-    {
-        await robot.Move(0, 0, -90);
-        await Task.Delay(3000);
-
-        await robot.Move(0.1f, 0.1f, 0);
-        await Task.Delay(2000);
-
-        await Utils.CenterOnLine(robot, LineColour.Red, 0.35f, 0.05f);
-
-        var actions = new Actions(robot, robotState);
-
-        actions.LookForObstacles(15);
-        await actions.FollowLine(LineColour.Red, 40);
-    }))
+    .OnEntry(() => Task.Run(() => Utils.MoveToDepot(robot, robotState)))
 
     .OnExitAsync(async () => await robot.SetWheelSpeed(0))
 
@@ -185,7 +169,7 @@ robotState.Configure(RobotState.GrabbingBox)
 
     .OnEntry(() => Task.Run(async () =>
     {
-        await robot.SetArmPosition(160, 100);
+        await robot.SetArmPosition(180, 100);
         await Task.Delay(2000);
 
         await robot.CloseGripper();
@@ -202,21 +186,9 @@ robotState.Configure(RobotState.GrabbingBox)
 robotState.Configure(RobotState.ReturningWithBox)
     .SubstateOf(RobotState.CollectingBox)
 
-    .OnEntry(() => Task.Run(async () =>
-    {
-        await robot.Move(0, 0, 180);
-        await Task.Delay(10000);
+    .OnEntry(() => Task.Run(() => Utils.ReturnFromDepot(robot, robotState)))
 
-        await robot.Move(0.3f, 0, 0);
-        await Task.Delay(2000);
-
-        await robot.Move(0, 0, -90);
-        await Task.Delay(3000);
-
-        _ = Task.Run(() => robotState.SafeFireAsync(RobotTrigger.ReturnedWithBox));
-    }))
-
-    .Permit(RobotTrigger.ReturnedWithBox, RobotState.FollowingRedLine);
+    .Permit(RobotTrigger.ReturnedFromDepot, RobotState.FollowingRedLine);
 
 robotState.Configure(RobotState.DroppingBox)
     .InitialTransition(RobotState.MovingToDropPoint);
@@ -224,21 +196,7 @@ robotState.Configure(RobotState.DroppingBox)
 robotState.Configure(RobotState.MovingToDropPoint)
     .SubstateOf(RobotState.DroppingBox)
 
-    .OnEntry(() => Task.Run(async () =>
-    {
-        await robot.Move(0, 0, -90);
-        await Task.Delay(3000);
-
-        await robot.Move(0.1f, 0.1f, 0);
-        await Task.Delay(2000);
-
-        await Utils.CenterOnLine(robot, LineColour.Red, 0.35f, 0.05f);
-
-        var actions = new Actions(robot, robotState);
-
-        actions.LookForObstacles(15);
-        await actions.FollowLine(LineColour.Red, 40);
-    }))
+    .OnEntry(() => Task.Run(() => Utils.MoveToDepot(robot, robotState)))
 
     .OnExitAsync(async () => await robot.SetWheelSpeed(0))
 
@@ -251,7 +209,7 @@ robotState.Configure(RobotState.PlacingBox)
 
     .OnEntry(() => Task.Run(async () =>
     {
-        await robot.SetArmPosition(160, 100);
+        await robot.SetArmPosition(180, 100);
         await Task.Delay(2000);
 
         await robot.OpenGripper();
@@ -268,21 +226,9 @@ robotState.Configure(RobotState.PlacingBox)
 robotState.Configure(RobotState.ReturningDropPoint)
     .SubstateOf(RobotState.DroppingBox)
 
-    .OnEntry(() => Task.Run(async () =>
-    {
-        await robot.Move(0, 0, 180);
-        await Task.Delay(10000);
+    .OnEntry(() => Task.Run(() => Utils.ReturnFromDepot(robot, robotState)))
 
-        await robot.Move(0.3f, 0, 0);
-        await Task.Delay(2000);
-
-        await robot.Move(0, 0, -90);
-        await Task.Delay(3000);
-
-        _ = Task.Run(() => robotState.SafeFireAsync(RobotTrigger.ReturnedFromDropPoint));
-    }))
-
-    .Permit(RobotTrigger.ReturnedFromDropPoint, RobotState.FollowingRedLine);
+    .Permit(RobotTrigger.ReturnedFromDepot, RobotState.FollowingRedLine);
 
 var stoppedReasons = new HashSet<RobotTrigger>() { RobotTrigger.Pause };
 robotState.Configure(RobotState.Stopped)

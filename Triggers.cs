@@ -12,8 +12,7 @@ public enum RobotTrigger
     FinishedNavigatingIntersection,
     CollectBox,
     GrabbedBox,
-    ReturnedWithBox,
     DropBox,
     DroppedBox,
-    ReturnedFromDropPoint,
+    ReturnedFromDepot
 }

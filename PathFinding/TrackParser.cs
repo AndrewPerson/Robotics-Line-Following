@@ -70,8 +70,8 @@ public static class TrackParser
 
 public record struct IntersectionPair
 (
-    string firstName,
-    string secondName,
+    string FirstName,
+    string SecondName,
     ConnectionTypeEnum ConnectionType,
-    float length
+    float Length
 );

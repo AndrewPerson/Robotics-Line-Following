@@ -45,7 +45,7 @@ public class DroppingAsyncEnumerable<T> : IAsyncEnumerable<T>
     {
         private CancellationToken cancellationToken;
 
-        private T current;
+        private T current = default!;
         private bool hasCurrent;
 
         private TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();

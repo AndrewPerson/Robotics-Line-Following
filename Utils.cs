@@ -1,4 +1,5 @@
 using System.Reactive.Linq;
+using Stateless;
 using RoboMaster;
 
 public static class Utils
@@ -10,8 +11,6 @@ public static class Utils
         await foreach (var line in robot.Line.ToDroppingAsyncEnumerable())
         {
             var x = line.Points[0].X;
-
-            Console.WriteLine(x);
 
             if (Math.Abs(x - targetX) < margin)
             {
@@ -29,6 +28,39 @@ public static class Utils
                 await robot.SetWheelSpeed(-50, 50, 50, -50);
             }
         }
+    }
+
+    public static async Task MoveToDepot(RoboMasterClient robot, StateMachine<RobotState, RobotTrigger> robotState)
+    {
+        await robot.Move(0, 0, -90);
+        await Task.Delay(3000);
+
+        await robot.SetWheelSpeed(30);
+        await Task.Delay(500);
+
+        await robot.SetWheelSpeed(-30, 30, 30, -30); // Move right
+        await Task.Delay(500);
+
+        await CenterOnLine(robot, LineColour.Red, 0.4f, 0.05f);
+
+        var actions = new Actions(robot, robotState);
+
+        actions.LookForObstacles(12);
+        await actions.FollowLine(LineColour.Red, 40);
+    }
+
+    public static async Task ReturnFromDepot(RoboMasterClient robot, StateMachine<RobotState, RobotTrigger> robotState)
+    {
+        await robot.Move(0, 0, 180);
+        await Task.Delay(8000);
+
+        await robot.SetWheelSpeed(60);
+        await Task.Delay(500);
+
+        await robot.Move(0, 0, -90);
+        await Task.Delay(3000);
+
+        _ = Task.Run(() => robotState.SafeFireAsync(RobotTrigger.ReturnedFromDepot));
     }
 
     public static async Task FindLine(RoboMasterClient robot, LineColour lineColour)
