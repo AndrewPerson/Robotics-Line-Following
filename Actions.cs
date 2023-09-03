@@ -9,73 +9,56 @@ public class Actions
         this.robot = robot;
     }
 
-    private static Task<StopReason> RunLoop(Func<Task<StopReason?>> action, CancellationToken cancellationToken)
+    public async Task LookForObstacle(float minDistance = 30, CancellationToken? cancellationToken = null)
     {
-        var taskCompletionSource = new TaskCompletionSource<StopReason>();
-
-        new Thread(async () =>
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                var result = await action();
-
-                if (result != null)
-                {
-                    taskCompletionSource.SetResult(result.Value);
-                    break;
-                }
-            }
-
-            if (cancellationToken.IsCancellationRequested)
-            {
-                taskCompletionSource.SetCanceled();
-            }
-        })
-        {
-            IsBackground = true
-        }.Start();
-
-        return taskCompletionSource.Task;
-    }
-
-    public Task<StopReason> LookForObstacles(float minDistance = 30, CancellationToken? cancellationToken = null)
-    {
-        return RunLoop(async () =>
+        while (true)
         {
             var distance = await robot.GetIRDistance(1);
 
             if (distance < minDistance)
             {
-                return StopReason.TooClose;
+                return;
+            }
+
+            if (cancellationToken != null && cancellationToken.Value.IsCancellationRequested)
+            {
+                return;
             }
 
             await Task.Delay(100);
-
-            return null;
-        }, cancellationToken ?? CancellationToken.None);
+        }
     }
 
-    public Task<StopReason> LookForNoObstacles(float minDistance = 30, CancellationToken? cancellationToken = null)
+    public async Task LookForNoObstacles(float minDistance = 30)
     {
-        return RunLoop(async () =>
+        while (true)
         {
             var distance = await robot.GetIRDistance(1);
 
             if (distance >= minDistance)
             {
-                return StopReason.NotTooClose;
+                return;
             }
 
             await Task.Delay(100);
-
-            return null;
-        }, cancellationToken ?? CancellationToken.None);
+        }
     }
 
-    public async Task<StopReason> FollowLine(LineColour lineColour, float? speed = null, CancellationToken? cancellationToken = null)
+    public async Task FollowLine(LineColour lineColour, float? speed = null, float obstacleDistance = 30)
     {
+        var cancellationTokenSource = new CancellationTokenSource();
+
         await robot.SetLineRecognitionColour(lineColour);
-        
+
+        _ = LookForObstacle(obstacleDistance, cancellationTokenSource.Token).ContinueWith(async _ =>
+        {
+            if (cancellationTokenSource.IsCancellationRequested) return;
+
+            await robot.SetWheelSpeed(0);
+            cancellationTokenSource.Cancel();
+            throw new ObstacleTooCloseException();
+        });
+
         var follower = new Follower();
         if (speed != null) follower.BaseWheelSpeed = speed.Value;
 
@@ -83,9 +66,12 @@ public class Actions
 
         await foreach (var line in robot.Line.ToDroppingAsyncEnumerable())
         {
-            if (cancellationToken?.IsCancellationRequested == true) return StopReason.Cancelled;
-
-            if (line.Type == LineType.None || line.Points.Length == 0) return StopReason.NoLine;
+            if (line.Type == LineType.None || line.Points.Length == 0)
+            {
+                await robot.SetWheelSpeed(0);
+                cancellationTokenSource.Cancel();
+                throw new NoLineException();
+            }
 
             if (line.Type == LineType.Intersection)
             {
@@ -93,7 +79,8 @@ public class Actions
             }
             else if (didSeeIntersection)
             {
-                return StopReason.Intersection;
+                cancellationTokenSource.Cancel();
+                return;
             }
 
             var (leftSpeed, rightSpeed) = follower.GetWheelSpeed(line);
@@ -101,27 +88,26 @@ public class Actions
             await robot.SetWheelSpeed(rightSpeed, leftSpeed);
         }
 
+        cancellationTokenSource.Cancel();
         throw new Exception("The line stream ended unexpectedly");
     }
 
-    public async Task<StopReason> FindLine(LineColour lineColour, CancellationToken? cancellationToken = null)
+    public async Task FindLine(LineColour lineColour)
     {
         await robot.SetLineRecognitionColour(lineColour);
 
         await foreach (var line in robot.Line.ToDroppingAsyncEnumerable())
         {
-            if (cancellationToken?.IsCancellationRequested == true) return StopReason.Cancelled;
-
             if (line.Type != LineType.None && line.Points.Length != 0)
             {
-                return StopReason.Line;
+                return;
             }
         }
 
         throw new Exception("The line stream ended unexpectedly");
     }
 
-    public async Task<StopReason> MoveToDepot()
+    public async Task MoveToDepot()
     {
         #region Move Approximately to Line
         await robot.Move(0, 0, -90);
@@ -162,21 +148,16 @@ public class Actions
         #endregion
 
         #region Move to Depot
-        var cancellationTokenSource = new CancellationTokenSource();
-        
-        await await Task.WhenAny
-        (
-            FollowLine(LineColour.Red, speed: 40, cancellationToken: cancellationTokenSource.Token),
-            LookForObstacles(cancellationToken: cancellationTokenSource.Token)
-        );
-
-        cancellationTokenSource.Cancel();
+        try
+        {
+            await FollowLine(LineColour.Red, speed: 40, obstacleDistance: 15);
+        }
+        catch (NoLineException) { }
+        catch (ObstacleTooCloseException) { }
         #endregion
-
-        return StopReason.Completed;
     }
 
-    public async Task<StopReason> ReturnFromDepot()
+    public async Task ReturnFromDepot()
     {
         await robot.Move(0, 0, 180);
         await Task.Delay(8000);
@@ -186,18 +167,19 @@ public class Actions
 
         await robot.Move(0, 0, -90);
         await Task.Delay(3000);
-
-        return StopReason.Completed;
     }
 }
 
-public enum StopReason
+public class NoLineException : Exception
 {
-    NoLine,
-    Line,
-    Intersection,
-    TooClose,
-    NotTooClose,
-    Completed,
-    Cancelled
+    public NoLineException() : base("No line was found")
+    {
+    }
+}
+
+public class ObstacleTooCloseException : Exception
+{
+    public ObstacleTooCloseException() : base("An obstacle was too close")
+    {
+    }
 }

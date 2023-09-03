@@ -1,6 +1,8 @@
 using System.Reactive.Linq;
 using System.Diagnostics;
 
+using Polly;
+
 using RoboMaster;
 
 using PathFinding;
@@ -67,37 +69,14 @@ while (true)
 {
     #region Follow Red Line
     {
-        var cancellationTokenSource = new CancellationTokenSource();
-        
-        var stoppedReason = await await Task.WhenAny
-        (
-            actions.FollowLine(LineColour.Red, cancellationToken: cancellationTokenSource.Token),
-            actions.LookForObstacles(cancellationToken: cancellationTokenSource.Token)
-        );
-
-        cancellationTokenSource.Cancel();
-        
-        while (stoppedReason == StopReason.TooClose || stoppedReason == StopReason.NoLine)
-        {
-            if (stoppedReason == StopReason.TooClose)
+        await Policy
+            .Handle<NoLineException>().Or<ObstacleTooCloseException>()
+            .RetryForeverAsync(async ex =>
             {
-                await actions.LookForNoObstacles();
-            }
-            else
-            {
-                await actions.FindLine(LineColour.Red);
-            }
-
-            cancellationTokenSource = new CancellationTokenSource();
-        
-            stoppedReason = await await Task.WhenAny
-            (
-                actions.FollowLine(LineColour.Red, cancellationToken: cancellationTokenSource.Token),
-                actions.LookForObstacles(cancellationToken: cancellationTokenSource.Token)
-            );
-
-            cancellationTokenSource.Cancel();
-        }
+                if (ex is NoLineException) await actions.FindLine(LineColour.Red);
+                else if (ex is ObstacleTooCloseException) await actions.LookForNoObstacles();
+            })
+            .ExecuteAsync(async () => await actions.FollowLine(LineColour.Red));
     }
     #endregion
 
@@ -139,37 +118,14 @@ while (true)
     }
     else if (currentConnection == ConnectionType.BlueLine)
     {
-        var cancellationTokenSource = new CancellationTokenSource();
-
-        var stoppedReason = await await Task.WhenAny
-        (
-            actions.FollowLine(LineColour.Red, cancellationToken: cancellationTokenSource.Token),
-            actions.LookForObstacles(cancellationToken: cancellationTokenSource.Token)
-        );
-
-        cancellationTokenSource.Cancel();
-
-        while (stoppedReason == StopReason.TooClose || stoppedReason == StopReason.NoLine)
-        {
-            if (stoppedReason == StopReason.TooClose)
+        await Policy
+            .Handle<NoLineException>().Or<ObstacleTooCloseException>()
+            .RetryForeverAsync(async ex =>
             {
-                await actions.LookForNoObstacles();
-            }
-            else
-            {
-                await actions.FindLine(LineColour.Red);
-            }
-
-            cancellationTokenSource = new CancellationTokenSource();
-
-            stoppedReason = await await Task.WhenAny
-            (
-                actions.FollowLine(LineColour.Red, cancellationToken: cancellationTokenSource.Token),
-                actions.LookForObstacles(cancellationToken: cancellationTokenSource.Token)
-            );
-
-            cancellationTokenSource.Cancel();
-        }
+                if (ex is NoLineException) await actions.FindLine(LineColour.Blue);
+                else if (ex is ObstacleTooCloseException) await actions.LookForNoObstacles();
+            })
+            .ExecuteAsync(async () => await actions.FollowLine(LineColour.Blue));
     }
     else
     {
