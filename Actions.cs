@@ -108,22 +108,17 @@ public class Actions
     {
         await robot.SetLineRecognitionColour(lineColour);
 
-        var lineEnumerator = robot.Line.ToDroppingAsyncEnumerable().GetAsyncEnumerator();
-        await lineEnumerator.MoveNextAsync();
-
-        return await RunLoop(async () =>
+        await foreach (var line in robot.Line.ToDroppingAsyncEnumerable())
         {
-            var line = lineEnumerator.Current;
+            if (cancellationToken?.IsCancellationRequested == true) return StopReason.Cancelled;
 
             if (line.Type != LineType.None && line.Points.Length != 0)
             {
                 return StopReason.Line;
             }
+        }
 
-            await lineEnumerator.MoveNextAsync();
-
-            return null;
-        }, cancellationToken ?? CancellationToken.None);
+        throw new Exception("The line stream ended unexpectedly");
     }
 
     public async Task<StopReason> MoveToDepot()
