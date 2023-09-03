@@ -1,3 +1,4 @@
+using System.Reactive.Linq;
 using RoboMaster;
 
 public class Actions
@@ -7,6 +8,18 @@ public class Actions
     public Actions(RoboMasterClient robot)
     {
         this.robot = robot;
+    }
+
+    private static float GetCircularDistance(float angle1, float angle2)
+    {
+        var distance = Math.Abs(angle1 - angle2);
+
+        if (distance > 180)
+        {
+            distance = 360 - distance;
+        }
+
+        return distance;
     }
 
     public async Task LookForObstacle(float minDistance = 30, CancellationToken? cancellationToken = null)
@@ -96,15 +109,54 @@ public class Actions
     {
         await robot.SetLineRecognitionColour(lineColour);
 
-        await foreach (var line in robot.Line.ToDroppingAsyncEnumerable())
+        var rotationEnumerable = robot.ChassisAttitude.Select(attitude => attitude.Yaw).ToDroppingAsyncEnumerable();
+        var lineEnumerable = robot.Line.ToDroppingAsyncEnumerable();
+
+        var startingYaw = await robot.ChassisAttitude.Select(attitude => attitude.Yaw).FirstAsync();
+        var stopDistance = 5f;
+        var hasLeftStopDistance = false;
+
+        var rotationsWithVisibleLine = new List<float>();
+
+        await robot.SetWheelSpeed(50, -50);
+
+        await foreach (var (yaw, line) in rotationEnumerable.Zip(lineEnumerable))
         {
-            if (line.Type != LineType.None && line.Points.Length != 0)
+            if (line.Type != LineType.None)
             {
-                return;
+                rotationsWithVisibleLine.Add(yaw);
+            }
+
+            if (!hasLeftStopDistance)
+            {
+                if (GetCircularDistance(yaw, startingYaw) > stopDistance)
+                {
+                    hasLeftStopDistance = true;
+                }
+            }
+            else
+            {
+                if (GetCircularDistance(yaw, startingYaw) < stopDistance)
+                {
+                    break;
+                }
             }
         }
 
-        throw new Exception("The line stream ended unexpectedly");
+        await robot.SetWheelSpeed(0);
+
+        var closestRotations = rotationsWithVisibleLine.OrderBy(rotation => GetCircularDistance(rotation, startingYaw)).Take(4).ToList();
+        var targetRotation = closestRotations.Average();
+
+        await robot.SetWheelSpeed(50, -50);
+
+        await foreach (var yaw in rotationEnumerable)
+        {
+            if (GetCircularDistance(yaw, targetRotation) < stopDistance)
+            {
+                break;
+            }
+        }
     }
 
     public async Task MoveToDepot()
