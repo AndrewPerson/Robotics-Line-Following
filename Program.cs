@@ -34,25 +34,7 @@ if (Console.ReadKey().KeyChar == 'y')
 var trackText = await File.ReadAllTextAsync("track.txt");
 var track = TrackParser.ParseTrack(trackText);
 
-Console.Write("Enter start intersection: ");
-var start = Console.ReadLine();
-
-Debug.Assert(start != null, "Start intersection name is null");
-Debug.Assert(track.ContainsKey(start), "Start intersection not found");
-
-Console.Write("Enter pickup intersection: ");
-var pickup = Console.ReadLine();
-
-Debug.Assert(pickup != null, "Pickup intersection name is null");
-Debug.Assert(track.ContainsKey(pickup), "Pickup intersection not found");
-
-Console.Write("Enter drop intersection: ");
-var drop = Console.ReadLine();
-
-Debug.Assert(drop != null, "Drop intersection name is null");
-Debug.Assert(track.ContainsKey(drop), "Drop intersection not found");
-
-var route = RoutePlanner.FindRoute(track[start], track[pickup], track[drop]);
+var route = GetUserRouteInput(track);
 Console.WriteLine($"Route: {string.Join(", ", route)}");
 
 var intersectionCount = -1;
@@ -82,7 +64,13 @@ while (true)
 
     intersectionCount++;
 
-    if (intersectionCount == route.Count) break;
+    if (intersectionCount == route.Count)
+    {
+        route = GetUserRouteInput(track);
+        Console.WriteLine($"Route: {string.Join(", ", route)}");
+
+        intersectionCount = 0;
+    }
 
     var currentConnection = route[intersectionCount];
 
@@ -156,4 +144,27 @@ while (true)
             _ => 0
         });
     }
+}
+
+static List<ConnectionType> GetUserRouteInput(Dictionary<string, PathFinding.AStar.Node<ConnectionType>> track)
+{
+    Console.Write("Enter start intersection: ");
+    var start = Console.ReadLine();
+
+    Debug.Assert(start != null, "Start intersection name is null");
+    Debug.Assert(track.ContainsKey(start), "Start intersection not found");
+
+    Console.Write("Enter pickup intersection: ");
+    var pickup = Console.ReadLine();
+
+    Debug.Assert(pickup != null, "Pickup intersection name is null");
+    Debug.Assert(track.ContainsKey(pickup), "Pickup intersection not found");
+
+    Console.Write("Enter drop intersection: ");
+    var drop = Console.ReadLine();
+
+    Debug.Assert(drop != null, "Drop intersection name is null");
+    Debug.Assert(track.ContainsKey(drop), "Drop intersection not found");
+
+    return RoutePlanner.FindRoute(track[start], track[pickup], track[drop]);
 }
