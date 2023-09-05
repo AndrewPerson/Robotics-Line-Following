@@ -27,7 +27,6 @@ public class DroppingAsyncEnumerable<T> : IAsyncEnumerable<T>
         private CancellationToken cancellationToken;
 
         private T current = default!;
-        private bool hasCurrent;
 
         private TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();
 
@@ -40,12 +39,8 @@ public class DroppingAsyncEnumerable<T> : IAsyncEnumerable<T>
 
         private void OnNext(T value)
         {
-            if (!hasCurrent)
-            {
-                current = value;
-                hasCurrent = true;
-                tcs.TrySetResult(true);
-            }
+            current = value;
+            tcs.TrySetResult(true);
         }
 
         private void OnError(Exception error)
@@ -60,11 +55,6 @@ public class DroppingAsyncEnumerable<T> : IAsyncEnumerable<T>
 
         public T Current => current;
 
-        public async ValueTask DisposeAsync()
-        {
-            await tcs.Task;
-        }
-
         public async ValueTask<bool> MoveNextAsync()
         {
             if (cancellationToken.IsCancellationRequested)
@@ -73,10 +63,14 @@ public class DroppingAsyncEnumerable<T> : IAsyncEnumerable<T>
                 return false;
             }
 
-            await tcs.Task;
+            var result = await tcs.Task;
             tcs = new TaskCompletionSource<bool>();
-            hasCurrent = false;
-            return true;
+            return result;
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            return ValueTask.CompletedTask;
         }
     }
 }
