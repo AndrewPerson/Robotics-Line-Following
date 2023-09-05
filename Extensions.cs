@@ -24,11 +24,11 @@ public class DroppingAsyncEnumerable<T> : IAsyncEnumerable<T>
 
     private class DroppingAsyncEnumerator<T> : IAsyncEnumerator<T>
     {
-        private CancellationToken cancellationToken;
+        private readonly CancellationToken cancellationToken;
 
         private T current = default!;
 
-        private TaskCompletionSource<bool> tcs = new TaskCompletionSource<bool>();
+        private TaskCompletionSource<bool> tcs = new();
 
         public DroppingAsyncEnumerator(IObservable<T> observable, CancellationToken cancellationToken)
         {
