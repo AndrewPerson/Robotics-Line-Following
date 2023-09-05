@@ -49,18 +49,14 @@ await robot.SetIrEnabled();
 
 while (true)
 {
-    #region Follow Red Line
-    {
-        await Policy
-            .Handle<NoLineException>().Or<ObstacleTooCloseException>()
-            .RetryForeverAsync(async ex =>
-            {
-                if (ex is NoLineException) await actions.FindLine(LineColour.Red);
-                else if (ex is ObstacleTooCloseException) await actions.LookForNoObstacles();
-            })
-            .ExecuteAsync(async () => await actions.FollowLine(LineColour.Red));
-    }
-    #endregion
+    await Policy
+        .Handle<NoLineException>().Or<ObstacleTooCloseException>()
+        .RetryForeverAsync(async ex =>
+        {
+            if (ex is NoLineException) await actions.FindLine(LineColour.Red);
+            else if (ex is ObstacleTooCloseException) await actions.LookForNoObstacles();
+        })
+        .ExecuteAsync(async () => await actions.FollowLine(LineColour.Red));
 
     intersectionCount++;
 
