@@ -1,5 +1,17 @@
+using RoboMaster;
+
 public static class Extensions
 {
+    public static async Task MoveForward(this RoboMasterClient robot, float distance, float speed = 50, float wheelCircumference = 31.415926536f)
+    {
+        float distancePerSecond = speed / 60 * wheelCircumference;
+        float seconds = distance / distancePerSecond;
+
+        await robot.SetWheelSpeed(speed);
+        await Task.Delay((int)(seconds * 1000));
+        await robot.SetWheelSpeed(0);
+    }
+
     // This returns an async enumerable that waits for the previous item to be consumed before producing the next one.
     // Items are dropped if they are produced faster than they are consumed.
     public static IAsyncEnumerable<T> ToDroppingAsyncEnumerable<T>(this IObservable<T> observable)

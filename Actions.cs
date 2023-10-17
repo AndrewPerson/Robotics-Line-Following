@@ -12,9 +12,12 @@ public class Actions
 
     private static float GetCircularDistance(float angle1, float angle2)
     {
-        var distance = Math.Abs(angle1 - angle2);
+        var normalisedAngle1 = angle1 < 0 ? angle1 + 360 : angle1;
+        var normalisedAngle2 = angle2 < 0 ? angle2 + 360 : angle2;
 
-        if (distance > 180)
+        var distance = Math.Abs(normalisedAngle1 - normalisedAngle2);
+
+        while (distance > 180)
         {
             distance = 360 - distance;
         }
@@ -108,75 +111,20 @@ public class Actions
     public async Task FindLine(LineColour lineColour)
     {
         await robot.SetLineRecognitionColour(lineColour);
+        await robot.SetWheelSpeed(0);
 
-        var rotationEnumerable = robot.ChassisAttitude.Select(attitude => attitude.Yaw).ToDroppingAsyncEnumerable();
-        var lineEnumerable = robot.Line.ToDroppingAsyncEnumerable();
-
-        var startingYaw = await robot.ChassisAttitude.Select(attitude => attitude.Yaw).FirstAsync();
-        var stopDistance = 5f;
-        var hasLeftStopDistance = false;
-
-        var rotationsWithVisibleLine = new List<float>();
-
-        await robot.SetWheelSpeed(50, -50);
-
-        await foreach (var (yaw, line) in rotationEnumerable.Zip(lineEnumerable))
+        await foreach (var line in robot.Line.ToDroppingAsyncEnumerable())
         {
             if (line.Type != LineType.None)
             {
-                rotationsWithVisibleLine.Add(yaw);
-            }
-
-            if (!hasLeftStopDistance)
-            {
-                if (GetCircularDistance(yaw, startingYaw) > stopDistance)
-                {
-                    hasLeftStopDistance = true;
-                }
-            }
-            else
-            {
-                if (GetCircularDistance(yaw, startingYaw) < stopDistance)
-                {
-                    break;
-                }
-            }
-        }
-
-        await robot.SetWheelSpeed(0);
-
-        var closestRotations = rotationsWithVisibleLine.OrderBy(rotation => GetCircularDistance(rotation, startingYaw)).Take(4).ToList();
-        var targetRotation = closestRotations.Average();
-
-        await robot.SetWheelSpeed(50, -50);
-
-        await foreach (var yaw in rotationEnumerable)
-        {
-            if (GetCircularDistance(yaw, targetRotation) < stopDistance)
-            {
-                break;
+                return;
             }
         }
     }
 
-    public async Task MoveToDepot()
+    public async Task FindLineHorizontally(LineColour lineColour, float targetX, float margin = 0.02f, float speed = 30)
     {
-        #region Move Approximately to Line
-        await robot.Move(0, 0, -90);
-        await Task.Delay(3000);
-
-        await robot.SetWheelSpeed(30);
-        await Task.Delay(500);
-
-        await robot.SetWheelSpeed(-30, 30, 30, -30); // Move right
-        await Task.Delay(500);
-        #endregion
-
-        #region Center on Line
-        var targetX = 0.4f;
-        var margin = 0.05f;
-
-        await robot.SetLineRecognitionColour(LineColour.Red);
+        await robot.SetLineRecognitionColour(lineColour);
 
         await foreach (var line in robot.Line.ToDroppingAsyncEnumerable())
         {
@@ -190,22 +138,85 @@ public class Actions
 
             if (x < targetX) // Go Left
             {
-                await robot.SetWheelSpeed(50, -50, -50, 50);
+                await robot.SetWheelSpeed(speed, -speed, -speed, speed);
             }
             else // Go Right
             {
-                await robot.SetWheelSpeed(-50, 50, 50, -50);
+                await robot.SetWheelSpeed(-speed, speed, speed, -speed);
             }
         }
+    }
+
+    public async Task AlineToLine(LineColour lineColour, float angularTolerance, float positionalTolerance = 0.05f)
+    {
+        await FindLineHorizontally(lineColour, 0.5f);
+
+        await foreach (var line in robot.Line.ToDroppingAsyncEnumerable())
+        {
+            if (line.Type == LineType.None)
+            {
+                await robot.SetWheelSpeed(0);
+                throw new NoLineException();
+            }
+
+            if (Math.Abs(line.Points[0].X - 0.5f) > positionalTolerance)
+            {
+                await robot.SetWheelSpeed(0);
+                await FindLineHorizontally(lineColour, 0.5f);
+
+                continue;
+            }
+
+            // Least squares line of best fit
+            var xMean = line.Points.Average(point => point.X);
+            var yMean = line.Points.Average(point => point.Y);
+
+            var denominator = line.Points.Select(point => Math.Pow(point.X - xMean, 2)).Sum();
+            var slope = denominator == 0 ? 90 : line.Points.Select(point => (point.X - xMean) * (point.Y - yMean)).Sum() / denominator;
+
+            var angle = (float)(Math.Atan(slope) * 180 / Math.PI);
+            Console.WriteLine(angle);
+
+            if (GetCircularDistance(angle, 90) < angularTolerance)
+            {
+                await robot.SetWheelSpeed(0);
+                return;
+            }
+
+            if (angle < 0) // Go Left
+            {
+                await robot.SetWheelSpeed(-15, 15);
+            }
+            else // Go Right
+            {
+                await robot.SetWheelSpeed(15, -15);
+            }
+        }
+    }
+
+    public async Task MoveToDepot()
+    {
+        #region Move Approximately to Line
+        await robot.Move(0, 0, -90);
+        await Task.Delay(3000);
+
+        await robot.MoveForward(10);
+
+        await robot.SetWheelSpeed(-30, 30, 30, -30); // Move right
+        await Task.Delay(500);
+        #endregion
+
+        #region Center on Line
+        await AlineToLine(LineColour.Red, 1.5f);
+        await FindLineHorizontally(LineColour.Red, 0.4f);
         #endregion
 
         #region Move to Depot
-        try
-        {
-            await FollowLine(LineColour.Red, speed: 40, obstacleDistance: 15);
-        }
-        catch (NoLineException) { }
-        catch (ObstacleTooCloseException) { }
+        await robot.SetWheelSpeed(30);
+
+        while (await robot.GetIRDistance(1) > 18) { }
+
+        await robot.SetWheelSpeed(0);
         #endregion
     }
 
@@ -214,11 +225,12 @@ public class Actions
         await robot.Move(0, 0, 180);
         await Task.Delay(8000);
 
-        await robot.SetWheelSpeed(60);
-        await Task.Delay(500);
+        await robot.MoveForward(40);
 
         await robot.Move(0, 0, -90);
         await Task.Delay(3000);
+
+        await FindLineHorizontally(LineColour.Red, 0.3f);
     }
 }
 

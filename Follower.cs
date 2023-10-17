@@ -12,8 +12,6 @@ public class Follower
 
     public ICurve PointWeights { get; set; } = new NormalDistribution(0, 0.6);
 
-    public ICurve ErrorCurve { get; set; } = new StraightLine();
-
     private double previousError = 0;
     private double cumulativeError = 0;
 

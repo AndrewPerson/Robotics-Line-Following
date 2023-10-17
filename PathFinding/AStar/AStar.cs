@@ -1,6 +1,6 @@
 namespace PathFinding.AStar;
 
-public record struct Node<DataT>(List<(Node<DataT>, float, DataT)> Connections);
+public record struct Node<DataT>(Dictionary<Node<DataT>, (float, DataT)> Connections);
 
 public static class AStar
 {
@@ -9,32 +9,20 @@ public static class AStar
         var toSearch = new PriorityQueue<Node<DataT>, float>();
         toSearch.Enqueue(from, 0);
 
+        var currentlySearching = new HashSet<Node<DataT>>() { from };
+
         var cameFrom = new Dictionary<Node<DataT>, Node<DataT>>();
 
-        var shortestPathTo = new Dictionary<Node<DataT>, float>()
-        {
-            { from, 0 }
-        };
+        var shortestPathTo = new Dictionary<Node<DataT>, float>() { { from, 0 } };
         
         while (toSearch.Count > 0)
         {
             var current = toSearch.Dequeue();
-            if (current == to)
-            {
-                var totalPath = new List<Node<DataT>>() { current };
+            currentlySearching.Remove(current);
 
-                while (cameFrom.ContainsKey(current))
-                {
-                    current = cameFrom[current];
-                    totalPath.Add(current);
-                }
+            if (current == to) continue;
 
-                totalPath.Reverse();
-
-                return totalPath;
-            }
-
-            foreach (var (neighbour, cost, _) in current.Connections)
+            foreach (var (neighbour, (cost, _)) in current.Connections)
             {
                 var pathLengthToNeighbour = shortestPathTo[current] + cost;
 
@@ -45,14 +33,28 @@ public static class AStar
                     
                     var weighting = pathLengthToNeighbour + heuristic(neighbour);
 
-                    if (!toSearch.UnorderedItems.Select(tuple => tuple.Element).Contains(neighbour))
+                    if (!currentlySearching.Contains(neighbour))
                     {
                         toSearch.Enqueue(neighbour, weighting);
+                        currentlySearching.Add(neighbour);
                     }
                 }
             }
         }
 
-        throw new Exception("Could not find a path!"); // TODO A better exception
+        {
+            var current = to;
+            var totalPath = new List<Node<DataT>>() { current };
+
+            while (cameFrom.ContainsKey(current))
+            {
+                current = cameFrom[current];
+                totalPath.Add(current);
+            }
+
+            totalPath.Reverse();
+
+            return totalPath;
+        }
     }
 }

@@ -12,7 +12,7 @@ var actions = new Actions(robot);
 
 Console.Write("Enter direct control mode? (y/n, default n): ");
 
-if (Console.ReadKey().KeyChar == 'y')
+if (Console.ReadLine() == "y")
 {
     Console.WriteLine();
     Console.WriteLine("Direct control mode enabled");
@@ -59,6 +59,7 @@ while (true)
         .ExecuteAsync(async () => await actions.FollowLine(LineColour.Red));
 
     intersectionCount++;
+    Console.WriteLine(intersectionCount);
 
     if (intersectionCount == route.Count)
     {
@@ -68,7 +69,19 @@ while (true)
         intersectionCount = 0;
     }
 
-    var currentConnection = route[intersectionCount];
+    var (currentConnection, _) = route[intersectionCount];
+    var currentCorrection = intersectionCount == 0 ? CorrectionType.None : route[intersectionCount - 1].Item2;
+
+    if (currentCorrection == CorrectionType.Left)
+    {
+        await robot.Move(0, 0, -90);
+        await Task.Delay(3000);
+    }
+    else if (currentCorrection == CorrectionType.Right)
+    {
+        await robot.Move(0, 0, 90);
+        await Task.Delay(3000);
+    }
 
     if (currentConnection == ConnectionType.CollectBox)
     {
@@ -103,22 +116,22 @@ while (true)
     else if (currentConnection == ConnectionType.BlueLine)
     {
         await Policy
-            .Handle<NoLineException>().Or<ObstacleTooCloseException>()
+            .Handle<ObstacleTooCloseException>()
             .RetryForeverAsync(async ex =>
             {
-                if (ex is NoLineException) await actions.FindLine(LineColour.Blue);
-                else if (ex is ObstacleTooCloseException) await actions.LookForNoObstacles();
+                if (ex is ObstacleTooCloseException) await actions.LookForNoObstacles();
             })
+            .WrapAsync(Policy.Handle<NoLineException>().FallbackAsync((_) => Task.CompletedTask))
             .ExecuteAsync(async () => await actions.FollowLine(LineColour.Blue));
     }
     else
     {
-        await robot.Move(currentConnection switch
+        await robot.MoveForward(currentConnection switch
         {
-            ConnectionType.Left or ConnectionType.Right => 0.3f,
-            ConnectionType.Forward => 0.2f,
+            ConnectionType.Left or ConnectionType.Right => 30,
+            ConnectionType.Forward => 20,
             _ => 0
-        }, 0, 0);
+        });
 
         await Task.Delay(currentConnection switch
         {
@@ -142,7 +155,7 @@ while (true)
     }
 }
 
-static List<ConnectionType> GetUserRouteInput(Dictionary<string, PathFinding.AStar.Node<ConnectionType>> track)
+static List<(ConnectionType, CorrectionType)> GetUserRouteInput(Dictionary<string, PathFinding.AStar.Node<(ConnectionType, CorrectionType)>> track)
 {
     Console.Write("Enter start intersection: ");
     var start = Console.ReadLine();
