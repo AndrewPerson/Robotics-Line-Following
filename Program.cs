@@ -53,6 +53,8 @@ while (true)
         .Handle<NoLineException>().Or<ObstacleTooCloseException>()
         .RetryForeverAsync(async ex =>
         {
+            await robot.SetWheelSpeed(0);
+
             if (ex is NoLineException) await actions.FindLine(LineColour.Red);
             else if (ex is ObstacleTooCloseException) await actions.LookForNoObstacles();
         })
@@ -63,6 +65,8 @@ while (true)
 
     if (intersectionCount == route.Count)
     {
+        await robot.SetWheelSpeed(0);
+
         route = GetUserRouteInput(track);
         Console.WriteLine($"Route: {string.Join(", ", route)}");
 
@@ -72,15 +76,21 @@ while (true)
     var (currentConnection, _) = route[intersectionCount];
     var currentCorrection = intersectionCount == 0 ? CorrectionType.None : route[intersectionCount - 1].Item2;
 
+    Console.WriteLine(currentConnection);
+
     if (currentCorrection == CorrectionType.Left)
     {
+        await robot.MoveForward(30);
         await robot.Move(0, 0, -90);
         await Task.Delay(3000);
+        await actions.FindLineHorizontally(LineColour.Red, 0.4f);
     }
     else if (currentCorrection == CorrectionType.Right)
     {
+        await robot.MoveForward(30);
         await robot.Move(0, 0, 90);
         await Task.Delay(3000);
+        await actions.FindLineHorizontally(LineColour.Red, 0.4f);
     }
 
     if (currentConnection == ConnectionType.CollectBox)
@@ -119,6 +129,8 @@ while (true)
             .Handle<ObstacleTooCloseException>()
             .RetryForeverAsync(async ex =>
             {
+                await robot.SetWheelSpeed(0);
+
                 if (ex is ObstacleTooCloseException) await actions.LookForNoObstacles();
             })
             .WrapAsync(Policy.Handle<NoLineException>().FallbackAsync((_) => Task.CompletedTask))
@@ -129,14 +141,6 @@ while (true)
         await robot.MoveForward(currentConnection switch
         {
             ConnectionType.Left or ConnectionType.Right => 30,
-            ConnectionType.Forward => 20,
-            _ => 0
-        });
-
-        await Task.Delay(currentConnection switch
-        {
-            ConnectionType.Left or ConnectionType.Right => 3000,
-            ConnectionType.Forward => 2000,
             _ => 0
         });
 

@@ -7,6 +7,9 @@ public static class Extensions
         float distancePerSecond = speed / 60 * wheelCircumference;
         float seconds = distance / distancePerSecond;
 
+        await robot.SetWheelSpeed(0);
+        await Task.Delay(1000);
+
         await robot.SetWheelSpeed(speed);
         await Task.Delay((int)(seconds * 1000));
         await robot.SetWheelSpeed(0);

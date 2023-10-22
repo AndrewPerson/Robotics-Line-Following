@@ -41,7 +41,7 @@ public class Actions
                 return;
             }
 
-            await Task.Delay(100);
+            await Task.Delay(500);
         }
     }
 
@@ -79,6 +79,7 @@ public class Actions
         if (speed != null) follower.BaseWheelSpeed = speed.Value;
 
         var didSeeIntersection = false;
+        var framesSinceLastIntersection = 0;
 
         await foreach (var line in robot.Line.ToDroppingAsyncEnumerable())
         {
@@ -89,12 +90,21 @@ public class Actions
                 throw new NoLineException();
             }
 
+            Console.WriteLine(line.Points.Sum(p => p.X) / line.Points.Length);
+
             if (line.Type == LineType.Intersection)
             {
                 didSeeIntersection = true;
+                framesSinceLastIntersection = 0;
             }
-            else if (didSeeIntersection)
+            else
             {
+                framesSinceLastIntersection++;
+            }
+
+            if (didSeeIntersection && framesSinceLastIntersection >= 5)
+            {
+                await robot.SetWheelSpeed(0);
                 cancellationTokenSource.Cancel();
                 return;
             }
@@ -104,6 +114,7 @@ public class Actions
             await robot.SetWheelSpeed(rightSpeed, leftSpeed);
         }
 
+        await robot.SetWheelSpeed(0);
         cancellationTokenSource.Cancel();
         throw new Exception("The line stream ended unexpectedly");
     }
@@ -122,7 +133,7 @@ public class Actions
         }
     }
 
-    public async Task FindLineHorizontally(LineColour lineColour, float targetX, float margin = 0.02f, float speed = 30)
+    public async Task FindLineHorizontally(LineColour lineColour, float targetX, float margin = 0.01f, float speed = 20)
     {
         await robot.SetLineRecognitionColour(lineColour);
 
@@ -147,7 +158,7 @@ public class Actions
         }
     }
 
-    public async Task AlineToLine(LineColour lineColour, float angularTolerance, float positionalTolerance = 0.05f)
+    public async Task AlignToLine(LineColour lineColour, float angularTolerance, float positionalTolerance = 0.05f)
     {
         await FindLineHorizontally(lineColour, 0.5f);
 
@@ -175,7 +186,6 @@ public class Actions
             var slope = denominator == 0 ? 90 : line.Points.Select(point => (point.X - xMean) * (point.Y - yMean)).Sum() / denominator;
 
             var angle = (float)(Math.Atan(slope) * 180 / Math.PI);
-            Console.WriteLine(angle);
 
             if (GetCircularDistance(angle, 90) < angularTolerance)
             {
@@ -207,8 +217,8 @@ public class Actions
         #endregion
 
         #region Center on Line
-        await AlineToLine(LineColour.Red, 1.5f);
-        await FindLineHorizontally(LineColour.Red, 0.4f);
+        await AlignToLine(LineColour.Red, 2f);
+        await FindLineHorizontally(LineColour.Red, 0.35f);
         #endregion
 
         #region Move to Depot
